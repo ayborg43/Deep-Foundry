@@ -55,6 +55,10 @@ class User(UUIDPrimaryKeyModel, AbstractBaseUser, PermissionsMixin):
     display_name = models.CharField(max_length=255, blank=True)
     avatar_url = models.URLField(null=True, blank=True)
     mfa_enabled = models.BooleanField(default=False)
+    # Envelope-encrypted TOTP shared secret (core.encryption), set during
+    # enrollment and only "live" once mfa_enabled flips to True on confirm.
+    # Added in Milestone 1 — see DATABASE.md §2.1 note.
+    mfa_secret = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -149,3 +153,29 @@ class WorkspaceMember(UUIDPrimaryKeyModel):
 
     def __str__(self) -> str:
         return f"{self.user_id} @ {self.workspace_id} ({self.role})"
+
+
+class ProviderCredential(UUIDPrimaryKeyModel):
+    """Per DATABASE.md §2.7. `deployment_mode` is currently always DEEPSEEK_CLOUD —
+    DEEPSEEK_SELF_HOSTED is a reserved value for the adapter planned in SOUL.md §16.2,
+    not usable until that ships (enforced in the serializer, not here)."""
+
+    class DeploymentMode(models.TextChoices):
+        DEEPSEEK_CLOUD = "deepseek_cloud", "DeepSeek Cloud"
+        DEEPSEEK_SELF_HOSTED = "deepseek_self_hosted", "DeepSeek Self-Hosted"
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="provider_credentials"
+    )
+    deployment_mode = models.CharField(max_length=30, choices=DeploymentMode.choices)
+    encrypted_key = models.BinaryField(null=True, blank=True)
+    endpoint_url = models.URLField(null=True, blank=True)
+    label = models.CharField(max_length=255)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "provider_credentials"
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.deployment_mode})"

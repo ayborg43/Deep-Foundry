@@ -70,6 +70,7 @@ Every epic references the doc sections it must stay consistent with. No task her
 - **Story:** As a new user, I want a personal workspace created automatically on signup, so that I don't have to configure anything before I can use the product.
   - Task: Auto-provision `type=personal` workspace + owner membership on registration.
   - Task: `GET/PATCH /me`, `GET/PATCH /workspaces/{id}` endpoints.
+  - Task: `GET /workspaces` (list, per `API.md` §2) — added during implementation: `/auth/login` and `/auth/mfa/verify` only return tokens, not a workspace, so a client without a fresh register/OAuth response needs a way to discover which workspace(s) it can act in.
   - Task: Web app: workspace settings shell (empty for now, populated by later milestones).
 
 ### Epic 1.3 — Provider Credentials
