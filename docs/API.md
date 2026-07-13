@@ -21,7 +21,9 @@ POST   /api/v1/auth/login
 POST   /api/v1/auth/logout
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/oauth/{provider}/callback
-POST   /api/v1/auth/mfa/verify
+POST   /api/v1/auth/mfa/enroll         (authenticated — generates a TOTP secret, not yet active)
+POST   /api/v1/auth/mfa/enroll/confirm (authenticated — first valid code flips mfa_enabled=true)
+POST   /api/v1/auth/mfa/verify         (unauthenticated — completes a login that returned mfa_required)
 GET    /api/v1/me
 PATCH  /api/v1/me
 
@@ -216,3 +218,30 @@ Default tiers enforced at the API Gateway: `60 req/min` per user for standard en
 ## 15. Versioning & Deprecation Policy
 
 A field or endpoint is never silently removed. Deprecation follows: announce in changelog + `Deprecation` response header → minimum 6-month overlap window → removal only in a new major version path. This applies equally to the Marketplace manifest schema (per `SOUL.md` §10.5, skill version bumps required for breaking permission changes) and the general API.
+
+## 16. Model Router Internal Test Harness (Milestone 2)
+
+Not the product chat API — that's `/api/v1/conversations/...` in [Section 4](#4-chat), which doesn't exist until Milestone 4 once Coworkers exist. This is the surface `IMPLEMENTATION_PLAN.md` Milestone 2's exit criteria calls for: a way to drive the Model Router end to end (capability negotiation, fallback, streaming, `model_calls` logging) before there's a Coworker to hang it off of. Superseded, not necessarily removed, once real chat endpoints land — a legitimate internal caller (e.g. a future admin "test this credential" button) could still want it.
+
+Served by the AI modules directly (mounted at `/ai/*`, `ARCHITECTURE.md` §3.1), not proxied through `/api/v1/`:
+
+```
+POST   /ai/internal/generate
+    body: { workspace_id, model_id, messages: [{role, content, tool_call_id?, name?}],
+            tools?: [{name, description, parameters}], temperature?, max_tokens?,
+            fallback_model_id? }
+    200: { content, tool_calls: [{id, name, arguments}], usage: {input_tokens, output_tokens} | null,
+           model_id, finish_reason }
+    400: capability violation (e.g. unknown model_id) or validation error
+    424: no deployment_mode=deepseek_cloud ProviderCredential configured for workspace_id
+    429: DeepSeek rate-limited and no fallback_model_id configured
+    502: DeepSeek adapter error and no fallback_model_id configured
+
+POST   /ai/internal/generate/stream
+    same body as above (model_config.stream is forced true regardless of what's sent)
+    200: text/event-stream — `event: chunk` frames shaped like
+         { delta, finish_reason, usage } (usage only populated on the final chunk),
+         or `event: error` with { detail } if the stream fails mid-flight
+```
+
+Both require `Authorization: Bearer <access>` and workspace membership, enforced natively in FastAPI (`ai/dependencies.py`) against the same JWTs and the same `WorkspaceMember` rule as the DRF-served endpoints — one Security & Permissions rule, two entrypoints, per `ARCHITECTURE.md` §7. No fallback on the streaming path: once bytes have reached the client, silently swapping models mid-stream would contradict the Router's normalization goal (`ARCHITECTURE.md` §5) — a stream failure surfaces as an `error` event instead.

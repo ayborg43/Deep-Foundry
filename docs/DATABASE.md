@@ -27,6 +27,7 @@
 | display_name | text | |
 | avatar_url | text nullable | |
 | mfa_enabled | boolean default false | |
+| mfa_secret | text nullable, encrypted at rest | TOTP shared secret, set during MFA enrollment (Milestone 1 / `SECURITY.md` §2); envelope-encrypted the same way as `provider_credentials.encrypted_key` (`SECURITY.md` §6) — added during Milestone 1 implementation, not present in the original Phase 1 schema |
 | created_at / updated_at | timestamptz | |
 
 **`oauth_identities`** — `id, user_id FK, provider (enum: google/github/microsoft/saml), provider_user_id, created_at`
@@ -179,7 +180,7 @@
 
 ### 3.4 Model Router / Execution Logs
 
-**`model_calls`** — `id, request_id uuid, workspace_id, coworker_id nullable, deployment_mode, model_id, capability_requested jsonb, fallback_used boolean, latency_ms int, status enum(success,error,rate_limited), created_at` — the structured event referenced in [ARCHITECTURE.md §9](ARCHITECTURE.md#9-observability-architecture); `usage_records` in `core` is derived from this stream during a nightly/streaming rollup, not independently recorded.
+**`model_calls`** — `id, request_id uuid, workspace_id, coworker_id nullable, deployment_mode, model_id, capability_requested jsonb, fallback_used boolean, input_tokens int nullable, output_tokens int nullable, cost_usd numeric nullable, latency_ms int, status enum(success,error,rate_limited), created_at` — the structured event referenced in [ARCHITECTURE.md §9](ARCHITECTURE.md#9-observability-architecture); `input_tokens`/`output_tokens`/`cost_usd` were added during Milestone 2 implementation — the original Phase 1 schema omitted them, which would have made the documented "`usage_records` is derived from this stream" claim impossible (there was nothing to derive from). `usage_records` in `core` is a rollup query over this table, not independently recorded. `coworker_id` has no FK constraint yet — the `Coworker` model doesn't exist until Milestone 3; it's a plain nullable UUID until then.
 
 **`tool_call_logs`** — `id, request_id uuid, task_id nullable, coworker_id, tool_id, input jsonb, output jsonb, sandbox_container_id text nullable, status enum(success,error,denied), created_at`
 

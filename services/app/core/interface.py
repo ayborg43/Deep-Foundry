@@ -3,11 +3,11 @@ Core <-> AI internal module interface, per API.md §12 and ARCHITECTURE.md §3.1
 
 This is the one seam AI modules and the Celery worker are allowed to cross to
 reach Core data — never a direct import of core.models internals, never a
-network call for MVP (ARCHITECTURE.md ADR-006). Every function here is a stub
-for Milestone 0: the real Coworker/Task/ApprovalRequest/ProviderCredential
-models don't exist until later milestones, so these return fixture data. The
-signatures are the actual contract and should not need to change shape when
-the real models land behind them.
+network call for MVP (ARCHITECTURE.md ADR-006). Functions here graduate from
+stub to real implementation as the models behind them land in later
+milestones; the signatures are the actual contract and shouldn't need to
+change shape when that happens (get_provider_credential graduated in
+Milestone 2, now that ProviderCredential exists from Milestone 1).
 """
 
 from __future__ import annotations
@@ -15,6 +15,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
+
+from core.encryption import decrypt_from_bytes
+from core.models import ProviderCredential
 
 
 @dataclass(frozen=True)
@@ -51,13 +54,32 @@ def get_coworker_config(coworker_id: UUID | str) -> ResolvedCoworkerConfig:
     )
 
 
+class CredentialNotFoundError(LookupError):
+    """No ProviderCredential of the requested deployment_mode exists for this
+    workspace. Callers (the Model Router) decide how to surface this — e.g.
+    a 424/400 to the caller, not a 500."""
+
+
 def get_provider_credential(workspace_id: UUID | str, deployment_mode: str) -> DecryptedCredential:
-    """Stub — real credential storage/decryption lands in Milestone 1 Epic 1.3."""
+    credential = (
+        ProviderCredential.objects.filter(
+            workspace_id=workspace_id, deployment_mode=deployment_mode
+        )
+        .order_by("-is_default", "-created_at")
+        .first()
+    )
+    if credential is None:
+        raise CredentialNotFoundError(
+            f"No {deployment_mode} credential configured for workspace {workspace_id}."
+        )
+    api_key = (
+        decrypt_from_bytes(bytes(credential.encrypted_key)) if credential.encrypted_key else None
+    )
     return DecryptedCredential(
         workspace_id=workspace_id,
         deployment_mode=deployment_mode,
-        api_key="stub-key-not-real",
-        endpoint_url=None,
+        api_key=api_key,
+        endpoint_url=credential.endpoint_url,
     )
 
 
