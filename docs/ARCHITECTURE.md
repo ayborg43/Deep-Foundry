@@ -1,6 +1,6 @@
 ## ARCHITECTURE.md
 
-# Agentarium — Technical Architecture
+# Deep-Foundry — Technical Architecture
 
 > Downstream of `SOUL.md`. Every decision here exists to serve the principles and modules defined there — most directly [Section 5 (Product Modules)](SOUL.md#5-product-modules), [Section 16 (Model Router)](SOUL.md#16-model-router), and [Section 17 (Technical Architecture summary)](SOUL.md#17-technical-architecture). If this document and `SOUL.md` ever disagree, `SOUL.md` wins and this document is wrong until fixed.
 
@@ -10,7 +10,7 @@
 
 1. **One code path to DeepSeek, structurally enforced.** The Model Router is not a convention that application code is trusted to follow — it is the *only* code path to DeepSeek's API. This is enforced by module boundaries and interface discipline, not code review alone, and it's what makes adding a self-hosted DeepSeek inference mode later (`SOUL.md` §16.2) a contained addition rather than a hunt through the codebase for direct API calls.
 2. **One codebase, two deployment targets.** Self-hosted (Dokploy-managed Docker Compose, single node or Swarm) and cloud (Kubernetes/managed) run the same images with different orchestration, never a forked feature set.
-3. **Modular monolith first, service split only when earned.** The core modules (auth, workspaces, billing, marketplace) and the AI modules (model calls, embeddings, agent execution) have different scaling and reliability characteristics, but that difference doesn't justify operating two independently deployed HTTP services before real load proves it necessary — especially for a single-node self-hosted deployment. Agentarium ships as one modular monolith with a hard internal module boundary between the two domains (separate Django apps and a mounted FastAPI ASGI sub-app, enforced by code organization and a documented interface, not a network call), so extracting the AI layer into its own service later — if it's ever earned — is a deployment change against an existing contract, not a rewrite of business logic (see ADR-006).
+3. **Modular monolith first, service split only when earned.** The core modules (auth, workspaces, billing, marketplace) and the AI modules (model calls, embeddings, agent execution) have different scaling and reliability characteristics, but that difference doesn't justify operating two independently deployed HTTP services before real load proves it necessary — especially for a single-node self-hosted deployment. Deep-Foundry ships as one modular monolith with a hard internal module boundary between the two domains (separate Django apps and a mounted FastAPI ASGI sub-app, enforced by code organization and a documented interface, not a network call), so extracting the AI layer into its own service later — if it's ever earned — is a deployment change against an existing contract, not a rewrite of business logic (see ADR-006).
 4. **Permissions are centralized, not scattered.** Every module that performs an action a coworker could take routes through one Security & Permissions evaluation point — never a locally reinvented check.
 5. **Everything async-capable is queue-backed.** Background Tasks, Workflow runs, and knowledge ingestion never block a request/response cycle. This is the one process boundary that *is* real and separate from day one — see Celery Workers below — independent of whether Core and AI code share a process.
 
@@ -97,6 +97,8 @@ One ASGI process, one container image, internally organized into two module grou
 **Why Django here:** these domains are relationally modeled, permission-heavy, and benefit from DRF's mature serialization/permission/viewset conventions and Django's admin tooling for internal ops — exactly the "boring CRUD with serious permission requirements" case described in `SOUL.md` §18.
 
 **Does NOT own:** any direct model provider call, any embedding computation, any long-running agent execution. It creates Task/Workflow *records* and hands execution to the AI modules via the documented in-process interface (see `API.md` §12) — it never calls a model provider SDK itself, and never imports an AI module's internals except through that interface.
+
+*Narrow, documented exception (Milestone 4):* Core's chat views read `ai.models.Conversation`/`Message` directly for plain listing/reading — those tables are relationally-modeled AI-domain data (`DATABASE.md` §3.3) with no business rule attached to a bare read, unlike sending a message, resuming a paused turn, or regenerating a response, which carry the actual orchestration logic (including the approval gate, `SECURITY.md` §4) and stay behind `ai.interface` — see `API.md` §12.
 
 **AI modules (FastAPI, mounted as an ASGI sub-application at `/ai/*`):**
 **Own:** The Model Router (the DeepSeek Cloud adapter today, the planned self-hosted DeepSeek adapter later — `SOUL.md` §16.2), Memory read/write/search, Knowledge ingestion and embedding, the Task Engine's and Workflow Engine's orchestration logic (creating and tracking runs — the actual step *execution* happens in Celery workers, per §3.2).
@@ -188,19 +190,34 @@ Coworker/Skill/Workflow execution
 - **Tool execution sandboxing:** every Tool invocation that executes code or shell commands runs inside an isolated container/microVM, provisioned per call — whether the call originates synchronously from a live chat request in the ASGI process or asynchronously from a Celery-executed Task/Workflow step — with network egress locked to an explicit allowlist per tool, torn down immediately after.
 - **Secrets:** provider API keys and integration OAuth tokens live in an encrypted secrets store (envelope-encrypted at rest in PostgreSQL for MVP; a dedicated secrets manager such as Vault is a V2+ upgrade path for cloud/enterprise), decrypted transiently by the AI modules at call time — whether invoked in-process during a live chat request or by a Celery worker — and never logged or returned to the client.
 
+### 7.1 Phase 4 adaptive execution paths
+
+- Capability proposals cross the Core attachment boundary only inside the locked,
+  Owner/Admin review transaction. The model-facing `propose_capability` tool can
+  create a pending record but has no attachment code path.
+- Consensus reuses the Task Engine: one durable task per current team member, then
+  a deterministic parser and aggregation rule persist votes/results. A tie or
+  failed unanimity becomes `deadlocked`, never an invented model tie-break.
+- Voice recognition/synthesis runs in the browser, while every final transcript
+  enters `ai.interface.start_turn`; model routing, tools, approvals, memory, and
+  audit behavior therefore remain identical to typed chat.
+- Memory conflict detection is deliberately deterministic (`subject: value`) and
+  snapshots both sources. Resolution appends provenance-linked resolved memory
+  instead of destructively rewriting either source.
+
 ---
 
 ## 8. Deployment Architecture
 
 ### 8.1 Self-hosted (Dokploy)
 
-**Dokploy** is the recommended self-hosted deployment path: an open-source, self-hostable PaaS that deploys a Docker Compose stack directly, with Traefik and Let's Encrypt TLS built in. The same `docker-compose.yml` bringing up the **application** container (ASGI process serving Core + mounted AI modules), a **worker** container (same image, `celery worker` entrypoint), PostgreSQL, Redis, and MinIO is what Dokploy deploys — Dokploy replaces the manually-configured reverse-proxy gateway from `ARCHITECTURE.md` §3.3 with its bundled Traefik instance, so there's one fewer piece for a self-hosting operator to configure by hand. Two application-role containers instead of three (per the modular-monolith decision, ADR-006) — one fewer moving part than a split-service topology.
+**Dokploy** is the recommended self-hosted deployment path: an open-source, self-hostable PaaS that deploys a Docker Compose stack directly, with Traefik and Let's Encrypt TLS built in. The same `docker-compose.yml` brings up the **web** container, an **application** container (ASGI process serving Core + mounted AI modules), a **worker** container (the same backend image with the `celery worker` entrypoint), PostgreSQL, Redis, MinIO, and a private Docker-in-Docker sandbox daemon. The daemon never mounts the host Docker socket; application and worker reach its API only on an internal Compose network, and every approved code call creates a fresh child container with `NetworkMode=none`, a read-only root, dropped capabilities, and explicit CPU/memory/PID/time/output limits. Dokploy replaces the optional `raw`-profile gateway with its bundled Traefik instance. The app runs migrations before passing its health check; worker and web startup are health-gated behind it. There remain only two backend application roles, not separate Core/AI service images (ADR-006).
 
 Two things worth calling out for operators:
 - **pgvector:** Dokploy's one-click Postgres service defaults to stock Postgres. The Compose file must point the Postgres service at a pgvector-enabled image (e.g. `pgvector/pgvector:pg16`) rather than relying on Dokploy's default — a configuration choice at deploy time, not a blocker.
 - **Scaling beyond one node:** Dokploy supports Docker Swarm for multi-server deployments, so an operator who outgrows a single node can scale `worker` replicas (and, later, `app` replicas) via Swarm without adopting Kubernetes — the natural next step up from the `docker-compose scale`-style single-node scaling this architecture already assumed.
 
-Raw `docker-compose up` (without Dokploy) remains a supported fallback for operators who prefer to manage their own reverse proxy and TLS — the Compose file itself has no Dokploy-specific dependency, so nothing is lost by not using it.
+Raw `docker compose --profile raw up` (without Dokploy) remains a supported fallback for operators who prefer to manage their own reverse proxy and TLS. That profile enables the bundled HTTP Traefik gateway; stateful and internal service ports otherwise bind to loopback. The full first-run, backup, restore, and upgrade procedure is maintained in [SELF_HOSTING.md](SELF_HOSTING.md).
 
 ### 8.2 Cloud (Kubernetes / managed)
 Same container image for both roles, deployed as two independently scalable Deployments — `app` (scaled by request/streaming load) and `worker` (scaled by queue depth) — differing only in the container command, plus managed PostgreSQL/Redis/S3 in place of the self-hosted stack's bundled equivalents. No image or code difference between self-hosted and cloud, and no image difference between `app` and `worker` roles either — only the entrypoint command and the orchestration around it, per `SOUL.md` §4.26.
@@ -212,7 +229,7 @@ GitHub Actions pipeline: lint → test (unit + integration) → build **one** co
 
 ## 9. Observability Architecture
 
-Every Model Router call and every Tool invocation emits a structured log event (correlation ID tying it to a Task/Workflow/Chat message) to a central log store, regardless of whether it originated in the ASGI process or a Celery worker. Cost and usage are aggregated from these events, not tracked separately — this guarantees the cost dashboard and the audit log can never drift out of sync with each other, since they're two views over the same event stream.
+Every Model Router call and every Tool invocation emits an append-only audit event with the relevant coworker and resource identifiers, regardless of whether it originated in the ASGI process or a Celery worker. Model Router calls also write the structured `model_calls` execution record. Cost and usage are aggregated directly from `model_calls`, never copied into a second ledger; the corresponding audit event is written in the same router logging path. PostgreSQL rejects audit-row updates and deletes, while workspace owner/admin APIs expose the audit and usage views.
 
 ---
 

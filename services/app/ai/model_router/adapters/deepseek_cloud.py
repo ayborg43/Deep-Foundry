@@ -33,28 +33,28 @@ from ai.model_router.types import (
 
 API_BASE = "https://api.deepseek.com/v1"
 
-# DeepSeek's two MVP-relevant models per SOUL.md §16.2/§4.2. Context length
-# and per-million-token pricing are DeepSeek's published rates at
-# implementation time — not verified live, re-check before relying on them
-# for real billing.
+# Current DeepSeek API models.
 _MODEL_CAPABILITIES = {
-    "deepseek-chat": Capabilities(
-        tool_calling=True, max_context=64_000, reasoning_mode=False, streaming=True
+    "deepseek-v4-flash": Capabilities(
+        tool_calling=True, max_context=1_000_000, reasoning_mode=True, streaming=True
     ),
-    "deepseek-reasoner": Capabilities(
-        tool_calling=True, max_context=64_000, reasoning_mode=True, streaming=True
+    "deepseek-v4-pro": Capabilities(
+        tool_calling=True, max_context=1_000_000, reasoning_mode=True, streaming=True
     ),
 }
 
 _PRICE_PER_MILLION_TOKENS_USD = {
-    "deepseek-chat": {"input": Decimal("0.27"), "output": Decimal("1.10")},
-    "deepseek-reasoner": {"input": Decimal("0.55"), "output": Decimal("2.19")},
+    "deepseek-v4-flash": {"input": Decimal("0.14"), "output": Decimal("0.28")},
+    "deepseek-v4-pro": {"input": Decimal("0.435"), "output": Decimal("0.87")},
 }
 
 
 class DeepSeekCloudAdapter(ModelAdapter):
+    deployment_mode = "deepseek_cloud"
+
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self.api_base = API_BASE
 
     # -- ModelAdapter contract -------------------------------------------------
 
@@ -116,6 +116,15 @@ class DeepSeekCloudAdapter(ModelAdapter):
             wire["tool_call_id"] = message.tool_call_id
         if message.name:
             wire["name"] = message.name
+        if message.tool_calls:
+            wire["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
+                }
+                for tc in message.tool_calls
+            ]
         return wire
 
     @staticmethod
@@ -158,15 +167,40 @@ class DeepSeekCloudAdapter(ModelAdapter):
         )
 
     def _generate_stream(self, payload: dict) -> Iterator[StreamChunk]:
+        # DeepSeek's streaming API sends tool_calls as fragments across many
+        # chunks, keyed by `index` — id/name arrive on the first fragment for
+        # that index, `arguments` arrives as a partial JSON string split
+        # across subsequent fragments. Accumulate silently and only surface
+        # the finalized ToolCall list on the chunk carrying finish_reason.
+        accumulated: dict[int, dict] = {}
         for event in self._post_stream("/chat/completions", payload):
             if not event.get("choices"):
                 continue
             choice = event["choices"][0]
             delta = choice.get("delta", {})
+            finish_reason = choice.get("finish_reason")
             usage_raw = event.get("usage")
+
+            for fragment in delta.get("tool_calls") or []:
+                index = fragment.get("index", 0)
+                slot = accumulated.setdefault(index, {"id": "", "name": "", "arguments": ""})
+                if fragment.get("id"):
+                    slot["id"] = fragment["id"]
+                function = fragment.get("function") or {}
+                if function.get("name"):
+                    slot["name"] = function["name"]
+                if function.get("arguments"):
+                    slot["arguments"] += function["arguments"]
+
+            content = delta.get("content") or ""
+            if not content and finish_reason is None and not usage_raw:
+                # A pure tool-call-fragment chunk — nothing complete to
+                # surface yet, already accumulated above.
+                continue
+
             yield StreamChunk(
-                delta=delta.get("content") or "",
-                finish_reason=choice.get("finish_reason"),
+                delta=content,
+                finish_reason=finish_reason,
                 usage=(
                     Usage(
                         input_tokens=usage_raw.get("prompt_tokens", 0),
@@ -175,7 +209,23 @@ class DeepSeekCloudAdapter(ModelAdapter):
                     if usage_raw
                     else None
                 ),
+                tool_calls=self._finalize_tool_calls(accumulated) if accumulated else None,
             )
+
+    @staticmethod
+    def _finalize_tool_calls(accumulated: dict[int, dict]) -> list[ToolCall]:
+        tool_calls = []
+        for index in sorted(accumulated):
+            slot = accumulated[index]
+            arguments = slot["arguments"]
+            try:
+                parsed_arguments = json.loads(arguments) if arguments else {}
+            except json.JSONDecodeError:
+                parsed_arguments = {}
+            tool_calls.append(
+                ToolCall(id=slot["id"], name=slot["name"], arguments=parsed_arguments)
+            )
+        return tool_calls
 
     # -- network boundary (isolated for mocking) --------------------------------
 
@@ -187,7 +237,7 @@ class DeepSeekCloudAdapter(ModelAdapter):
 
     def _build_post_request(self, path: str, payload: dict) -> urllib.request.Request:
         return urllib.request.Request(
-            f"{API_BASE}{path}",
+            f"{self.api_base}{path}",
             data=json.dumps(payload).encode(),
             headers=self._headers(),
             method="POST",
@@ -227,7 +277,7 @@ class DeepSeekCloudAdapter(ModelAdapter):
             raise AdapterError(f"DeepSeek unreachable: {exc.reason}") from exc
 
     def _get(self, path: str) -> dict:
-        request = urllib.request.Request(f"{API_BASE}{path}", headers=self._headers(), method="GET")
+        request = urllib.request.Request(f"{self.api_base}{path}", headers=self._headers(), method="GET")
         try:
             with urllib.request.urlopen(request, timeout=10) as response:
                 return json.loads(response.read())

@@ -21,6 +21,10 @@ class ChatMessage:
     content: str
     tool_call_id: str | None = None  # set on role="tool" messages
     name: str | None = None
+    # Set on role="assistant" messages that requested tool calls, so a
+    # follow-up model call replaying history sees what it asked for, not
+    # just the tool results that came back.
+    tool_calls: list[ToolCall] | None = None
 
 
 @dataclass(frozen=True)
@@ -32,7 +36,7 @@ class ToolDefinition:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    model_id: str  # e.g. "deepseek-chat", "deepseek-reasoner"
+    model_id: str  # e.g. "deepseek-v4-flash"
     temperature: float = 1.0
     max_tokens: int | None = None
     stream: bool = False
@@ -65,6 +69,12 @@ class StreamChunk:
     delta: str
     finish_reason: str | None = None
     usage: Usage | None = None  # only populated on the final chunk
+    # Only populated once, alongside finish_reason=="tool_calls" — providers
+    # stream tool-call arguments as fragmented deltas across many chunks
+    # (accumulated by index), so a single chunk's raw fragment is never
+    # valid on its own; adapters emit the fully-assembled list here instead
+    # of leaking partial fragments to callers.
+    tool_calls: list[ToolCall] | None = None
 
 
 @dataclass(frozen=True)

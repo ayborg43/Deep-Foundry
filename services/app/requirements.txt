@@ -4,10 +4,14 @@ fastapi==0.139.0
 uvicorn[standard]==0.51.0
 celery[redis]==5.6.3
 psycopg[binary]==3.3.4
+pgvector==0.4.2
+boto3==1.40.46
+pypdf==6.1.1
 python-dotenv==1.2.2
 djangorestframework-simplejwt==5.5.1
 argon2-cffi==25.1.0
 pyotp==2.10.0
 cryptography==49.0.0
 django-cors-headers==4.9.0
+croniter==6.0.0
 httpx2==2.5.0  # test-only: required by starlette.testclient.TestClient for the AI module's FastAPI endpoints

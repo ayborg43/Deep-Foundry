@@ -1,12 +1,12 @@
 ## UI_GUIDELINES.md
 
-# Agentarium — UI/UX Guidelines
+# Deep-Foundry — UI/UX Guidelines
 
 > Downstream of `SOUL.md` [Section 1.6 (Design Principles)](SOUL.md#16-design-principles) and the interaction-bearing modules in [Section 5](SOUL.md#5-product-modules) (Chat, Coworkers, Voice, Desktop App). Stack per `SOUL.md` §18: Next.js, TypeScript, Tailwind CSS, shadcn/ui.
 
 ## 1. Design Philosophy
 
-Agentarium's interface has to hold two things in tension that most AI products don't: it must feel as immediate and conversational as a chat app, while making persistent, stateful, permissioned entities (coworkers) legible in a way a disposable chat thread never has to be. The UI mantra: **a chat window is a view into a coworker, not the coworker itself.** Every screen should reinforce that the coworker exists before, during, and after any single conversation.
+Deep-Foundry's interface has to hold two things in tension that most AI products don't: it must feel as immediate and conversational as a chat app, while making persistent, stateful, permissioned entities (coworkers) legible in a way a disposable chat thread never has to be. The UI mantra: **a chat window is a view into a coworker, not the coworker itself.** Every screen should reinforce that the coworker exists before, during, and after any single conversation.
 
 Guiding principles inherited from `SOUL.md` §1.6, applied concretely:
 
@@ -74,6 +74,7 @@ The **Coworkers roster** is the single most important IA decision: it is the pag
 - WCAG 2.1 AA as the baseline bar for all first-party surfaces.
 - Full keyboard navigability for chat (send, regenerate, approve/deny) and the approval queue specifically — approvals are often time-sensitive and must not require a mouse.
 - Screen-reader labeling for tool-call cards and approval prompts is treated as functionally required, not cosmetic — a screen-reader user must be able to understand *what a coworker is about to do* with the same fidelity as a sighted user, given the trust stakes involved.
+- The MVP Chat implementation exposes the message stream as a polite live log, labels composer and icon-only controls, and reports tool-call expansion state with `aria-expanded`/`aria-controls`. Inline approvals are named regions with action-specific button labels. The Approval Queue uses semantic headings/articles, announces loading and errors, and makes overflowing argument payloads keyboard-focusable.
 - Color is never the sole signal for status (Idle/Working/Needs Approval/Error) — always paired with an icon and text label.
 
 ## 6. Responsive & Multi-Surface Behavior

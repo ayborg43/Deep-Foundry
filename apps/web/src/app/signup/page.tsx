@@ -37,6 +37,7 @@ export default function SignupPage() {
     try {
       const result = await apiFetch<AuthSuccess>("/auth/register", {
         method: "POST",
+        auth: false,
         body: JSON.stringify({
           email,
           password,
@@ -45,7 +46,7 @@ export default function SignupPage() {
       });
       setTokens(result.tokens);
       setWorkspaceId(result.workspace.id);
-      router.push("/");
+      router.push("/home");
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -58,12 +59,16 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
+      <Link href="/" className="flex flex-col items-center gap-1.5 text-center">
+        <span aria-hidden className="text-3xl leading-none text-primary">✳</span>
+        <span className="font-heading text-xl font-semibold tracking-tight">Deep-Foundry</span>
+      </Link>
+      <Card className="w-full max-w-sm shadow-xl shadow-foreground/5">
         <CardHeader>
           <CardTitle className="text-xl">Create your account</CardTitle>
           <CardDescription>
-            Set up your Agentarium workspace to get started.
+            Set up your Deep-Foundry workspace to get started.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

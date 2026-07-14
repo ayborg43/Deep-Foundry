@@ -1,6 +1,6 @@
 ## ROADMAP.md
 
-# Agentarium — Roadmap
+# Deep-Foundry — Roadmap
 
 > Expands `SOUL.md` [Section 19](SOUL.md#19-roadmap) and [Section 2 (Product Goals)](SOUL.md#2-product-goals). Sequencing here reflects dependency order between modules (`ARCHITECTURE.md` §3) and feature priority tiers (`SOUL.md` §6), not calendar-date commitments — this is a phase plan, not a Gantt chart.
 
@@ -14,16 +14,23 @@
 
 ## Phase 1 — MVP: Single-User Core
 
+**Implementation status:** Complete. Milestones 0–8 are implemented. Automated
+tests cover the permission invariant and core product paths; the self-hosting
+acceptance checklist in `SELF_HOSTING.md` is the release/operator verification
+using that deployment's own DeepSeek, Google OAuth, and SMTP credentials.
+
 **Goal:** Prove the central thesis — a persistent coworker with real memory and a working permission system — end to end, self-hostable, for a single user.
 
 **In scope** (see `SOUL.md` §6 for full MVP feature list):
 - Auth (email/password + one OAuth provider), single-user Workspace.
-- Coworker CRUD, role/model/skill/tool/knowledge configuration, versioning.
+- Coworker CRUD, role/model/tool/knowledge configuration, versioning. Reusable
+  Skills and their authoring/publishing lifecycle land with the V2 Developer SDK
+  and Marketplace rather than shipping as a disconnected MVP-only format.
 - Chat: streaming, inline tool-call transparency, inline approval prompts.
 - Memory: per-user + per-coworker scopes, vector search, manual edit/delete, timeline.
 - Knowledge Bases: document upload ingestion (chunk/embed), basic search.
 - Model Router live against DeepSeek's Cloud API (DeepSeek-V3 and DeepSeek-R1) with capability negotiation and fallback between DeepSeek's own model tiers.
-- Built-in first-party Skills/Tools: web search, file read/write (via Desktop Companion stub or sandboxed cloud tool), basic code execution — enough to make a coworker genuinely useful without the Marketplace existing yet.
+- Built-in first-party Tools: web search, workspace-scoped file read/write, and sandboxed code execution — enough to make a coworker useful without the Marketplace or private Skill SDK existing yet.
 - Permission system: risk classification, approval gates for `dangerous` tools, audit log.
 - Self-hosted deployment: Dokploy-managed Docker Compose, documented setup (`ARCHITECTURE.md` §8.1/ADR-008).
 
@@ -34,6 +41,12 @@
 ---
 
 ## Phase 2 — V2: Teams, Marketplace, Automation
+
+**Implementation status:** Complete in the repository. Organization/RBAC, Agent
+Teams, durable workflows, Marketplace/Capability Packs, the scoped Developer SDK,
+integrations, voice, self-hosted DeepSeek routing, subscriptions, and the
+permission-gated Desktop Companion are implemented. Commercial cloud operation
+still requires operator-owned infrastructure and payment-provider configuration.
 
 **Goal:** Turn a single useful coworker into an ecosystem — teams of coworkers, a real marketplace, and automation that runs without a human driving every step.
 
@@ -55,7 +68,14 @@
 
 ## Phase 3 — V3: Enterprise & Ecosystem Maturity
 
-**Goal:** Make Agentarium trustworthy and capable enough for regulated/enterprise use, and make the marketplace a real economy.
+**Implementation status:** Complete in the repository. Enterprise identity and
+directory provisioning, delegated governance, anomaly detection and compliance
+exports, marketplace security/dependencies/orders/payouts, portable coworkers,
+conditional workflows, structured multimodal artifacts, residency/SLA controls,
+and their administration UI are implemented. External identity, payment, and
+regional infrastructure still require operator-owned provider configuration.
+
+**Goal:** Make Deep-Foundry trustworthy and capable enough for regulated/enterprise use, and make the marketplace a real economy.
 
 **In scope** (see `SOUL.md` §6 V3 rows):
 - SSO/SAML, SCIM provisioning, delegated admin roles, compliance evidence export.
@@ -70,14 +90,31 @@
 
 ---
 
-## Beyond V3 — Research Track
+## Phase 4 — Adaptive Collaboration
 
-Not scheduled; explored opportunistically, always subject to the approval-gate principle in `SOUL.md` §3 even in speculative form:
+**Implementation status:** Complete in the repository. Capability-gap proposals,
+cross-coworker memory reconciliation, durable Agent Team consensus, and continuous
+browser voice sessions are implemented. Provider-native audio streaming remains
+capability-dependent; the shipping path uses continuous speech recognition and
+synthesis around the existing audited text/model pipeline.
 
-- Coworkers proposing their own skill gaps, subject to human approval before any new capability is granted.
-- Real-time voice-to-voice interaction (pending model provider support maturity).
-- Cross-coworker memory conflict resolution.
-- Voting/consensus mechanisms among Agent Team members for ambiguous decisions.
+**Goal:** Let coworkers identify missing capability, negotiate disagreement, and
+participate in ambiguous decisions without weakening human control.
+
+**In scope:**
+- Coworker capability proposals. A proposal is inert until an Owner/Admin approves;
+  approval attaches only an existing tool or workspace-installed skill.
+- Live voice sessions with continuous browser recognition, spoken responses, typed
+  fallback, private transcripts, and the normal tool-approval/memory/audit path.
+- Explainable `subject: value` conflict detection across coworker memory, manual
+  conflict reporting, and keep/merge resolution propagated to affected coworkers.
+- Majority, unanimous, and confidence-weighted Agent Team consensus, implemented
+  as durable coworker tasks with attributed votes and explicit deadlock state.
+
+**Exit criteria:** A coworker can request a capability without receiving it,
+an administrator can explicitly approve it, two coworker memories can be reconciled,
+and a multi-member Agent Team can produce an auditable decision while a user can
+hold a continuous voice session through the same trust controls as chat.
 
 ---
 

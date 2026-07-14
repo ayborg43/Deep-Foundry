@@ -23,6 +23,7 @@ from ai.model_router.types import (
     Usage,
 )
 from ai.models import ModelCall
+from core.interface import write_audit_log
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -164,11 +165,11 @@ class ModelRouter:
         fallback_used: bool,
     ) -> None:
         cost = self.adapter.estimate_cost(usage, model_config.model_id) if usage else None
-        ModelCall.objects.create(
+        call = ModelCall.objects.create(
             request_id=request_id,
             workspace_id=self.workspace_id,
             coworker_id=self.coworker_id,
-            deployment_mode="deepseek_cloud",
+            deployment_mode=getattr(self.adapter, "deployment_mode", "deepseek_cloud"),
             model_id=model_config.model_id,
             capability_requested={"tool_calling": bool(tools), "streaming": model_config.stream},
             fallback_used=fallback_used,
@@ -177,6 +178,25 @@ class ModelRouter:
             cost_usd=cost,
             latency_ms=latency_ms,
             status=status,
+        )
+        write_audit_log(
+            actor_type="coworker" if self.coworker_id else "system",
+            actor_id=self.coworker_id,
+            action="model.call",
+            resource_type="model_call",
+            resource_id=call.id,
+            workspace_id=self.workspace_id,
+            metadata={
+                "coworker_id": str(self.coworker_id) if self.coworker_id else None,
+                "deployment_mode": call.deployment_mode,
+                "model_id": call.model_id,
+                "input_tokens": call.input_tokens,
+                "output_tokens": call.output_tokens,
+                "cost_usd": str(call.cost_usd) if call.cost_usd is not None else None,
+                "latency_ms": call.latency_ms,
+                "status": call.status,
+                "fallback_used": call.fallback_used,
+            },
         )
 
     def _log_failure(
@@ -192,14 +212,30 @@ class ModelRouter:
             if isinstance(error, RateLimitedError)
             else ModelCall.Status.ERROR
         )
-        ModelCall.objects.create(
+        call = ModelCall.objects.create(
             request_id=request_id,
             workspace_id=self.workspace_id,
             coworker_id=self.coworker_id,
-            deployment_mode="deepseek_cloud",
+            deployment_mode=getattr(self.adapter, "deployment_mode", "deepseek_cloud"),
             model_id=model_config.model_id,
             capability_requested={"tool_calling": bool(tools), "streaming": model_config.stream},
             fallback_used=fallback_used,
             latency_ms=0,
             status=status,
+        )
+        write_audit_log(
+            actor_type="coworker" if self.coworker_id else "system",
+            actor_id=self.coworker_id,
+            action="model.call_failed",
+            resource_type="model_call",
+            resource_id=call.id,
+            workspace_id=self.workspace_id,
+            metadata={
+                "coworker_id": str(self.coworker_id) if self.coworker_id else None,
+                "deployment_mode": call.deployment_mode,
+                "model_id": call.model_id,
+                "status": call.status,
+                "fallback_used": call.fallback_used,
+                "error_type": type(error).__name__,
+            },
         )

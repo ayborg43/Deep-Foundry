@@ -1,0 +1,21 @@
+http:
+  routers:
+    backend:
+      entryPoints: [web]
+      rule: "PathPrefix(`/api`) || PathPrefix(`/ai`) || PathPrefix(`/internal`) || Path(`/health`)"
+      priority: 100
+      service: backend
+    frontend:
+      entryPoints: [web]
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      service: frontend
+  services:
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://app:8000"
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://web:3000"

@@ -1,12 +1,12 @@
 ## CONTRIBUTING.md
 
-# Contributing to Agentarium
+# Contributing to Deep-Foundry
 
 > Operationalizes `SOUL.md` [Section 20 (Development Rules)](SOUL.md#20-development-rules) and principle 6, "Community first" ([Section 3](SOUL.md#3-product-principles)). If anything here conflicts with `SOUL.md`, `SOUL.md` governs — open an issue proposing a revision to this document instead of quietly diverging from it.
 
 ## 1. Before You Start
 
-Agentarium is documentation-first. Read `SOUL.md` in full before proposing any feature — it is the constitution every contribution is measured against. If your idea contradicts a principle or concept in `SOUL.md`, the correct first PR is a proposed revision to `SOUL.md` itself, discussed and merged before any implementation PR builds on it.
+Deep-Foundry is documentation-first. Read `SOUL.md` in full before proposing any feature — it is the constitution every contribution is measured against. If your idea contradicts a principle or concept in `SOUL.md`, the correct first PR is a proposed revision to `SOUL.md` itself, discussed and merged before any implementation PR builds on it.
 
 For structural changes, also check: `ARCHITECTURE.md` (service boundaries), `DATABASE.md` (schema), `API.md` (contracts), `SECURITY.md` (permission/risk model), `UI_GUIDELINES.md` (client-facing conventions).
 
@@ -77,6 +77,7 @@ Because `SOUL.md` is binding on all future work, changing it is not a normal doc
 
 - Unit tests for all new business logic.
 - Integration tests for any new API endpoint (`API.md` contract compliance).
+- Every pull request runs migration-drift detection, the full Django suite, frontend lint/build, and both production container builds in `.github/workflows/ci.yml`.
 - For anything touching the permission/approval system: explicit test cases proving a `dangerous` tool call cannot execute without an approval record, and that org policy floors cannot be lowered by a coworker-level config — these are the platform's core trust guarantees and regressions here are treated as release-blocking.
 - For Skills/Tools submitted to the Marketplace: the SDK's local validation harness (`API.md` §13) must pass before submission; it's the first automated gate in the review pipeline (`SECURITY.md` §7).
 

@@ -12,9 +12,12 @@ export type Tokens = {
   refresh: string;
 };
 
-const ACCESS_KEY = "agentarium.tokens.access";
-const REFRESH_KEY = "agentarium.tokens.refresh";
-const WORKSPACE_ID_KEY = "agentarium.workspace_id";
+const ACCESS_KEY = "deep-foundry.tokens.access";
+const REFRESH_KEY = "deep-foundry.tokens.refresh";
+const WORKSPACE_ID_KEY = "deep-foundry.workspace_id";
+const LEGACY_ACCESS_KEY = "agentarium.tokens.access";
+const LEGACY_REFRESH_KEY = "agentarium.tokens.refresh";
+const LEGACY_WORKSPACE_ID_KEY = "agentarium.workspace_id";
 
 let memoryTokens: Tokens | null = null;
 
@@ -33,12 +36,17 @@ export function getTokens(): Tokens | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const access = window.localStorage.getItem(ACCESS_KEY);
-  const refresh = window.localStorage.getItem(REFRESH_KEY);
+  const access =
+    window.localStorage.getItem(ACCESS_KEY) ??
+    window.localStorage.getItem(LEGACY_ACCESS_KEY);
+  const refresh =
+    window.localStorage.getItem(REFRESH_KEY) ??
+    window.localStorage.getItem(LEGACY_REFRESH_KEY);
   if (!access || !refresh) {
     return null;
   }
   memoryTokens = { access, refresh };
+  setTokens(memoryTokens);
   return memoryTokens;
 }
 
@@ -48,6 +56,9 @@ export function clearTokens(): void {
     window.localStorage.removeItem(ACCESS_KEY);
     window.localStorage.removeItem(REFRESH_KEY);
     window.localStorage.removeItem(WORKSPACE_ID_KEY);
+    window.localStorage.removeItem(LEGACY_ACCESS_KEY);
+    window.localStorage.removeItem(LEGACY_REFRESH_KEY);
+    window.localStorage.removeItem(LEGACY_WORKSPACE_ID_KEY);
   }
 }
 
@@ -70,7 +81,9 @@ export function setWorkspaceId(id: string): void {
 
 export async function getWorkspaceId(): Promise<string | null> {
   if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem(WORKSPACE_ID_KEY);
+    const stored =
+      window.localStorage.getItem(WORKSPACE_ID_KEY) ??
+      window.localStorage.getItem(LEGACY_WORKSPACE_ID_KEY);
     if (stored) return stored;
   }
 

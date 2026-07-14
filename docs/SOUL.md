@@ -1,14 +1,14 @@
 ## SOUL.md
 
-# Agentarium
+# Deep-Foundry
 
 ### An Open Source AI Operating System for Intelligent Co-Workers
 
 **Status:** Foundational document — source of truth
-**Version:** 0.1.0 (Phase 1 — Product Architecture)
+**Version:** 0.2.0 (Phase 1 — MVP implementation)
 **Last updated:** 2026-07-12
 
-> This document is the permanent constitution of Agentarium. Every feature, architecture decision, database schema, API surface, UI pattern, and workflow must trace back to a principle or concept defined here. If a proposed change contradicts this document, the change must either be rejected or this document must be explicitly revised first — never silently overridden. All other documents (`ARCHITECTURE.md`, `ROADMAP.md`, `DATABASE.md`, `API.md`, `UI_GUIDELINES.md`, `SECURITY.md`, `CONTRIBUTING.md`) are downstream of this one.
+> This document is the permanent constitution of Deep-Foundry. Every feature, architecture decision, database schema, API surface, UI pattern, and workflow must trace back to a principle or concept defined here. If a proposed change contradicts this document, the change must either be rejected or this document must be explicitly revised first — never silently overridden. All other documents (`ARCHITECTURE.md`, `ROADMAP.md`, `DATABASE.md`, `API.md`, `UI_GUIDELINES.md`, `SECURITY.md`, `CONTRIBUTING.md`) are downstream of this one.
 
 ---
 
@@ -47,11 +47,11 @@ Meanwhile the actual promise of large language models — reasoning, planning, t
 
 The current AI tooling landscape is also closed by default. The major assistant products are tied to proprietary, closed-weight models — you can talk to them, but you can never run them yourself, inspect them, or take them with you if the vendor changes terms, raises prices, or shuts the product down. Open source alternatives exist but are either single-agent chat clones or developer-only frameworks with no product surface a non-engineer could use, and almost none of them are built on a model family a user could actually self-host.
 
-Agentarium exists to close that gap: an **open source AI operating system built specifically on DeepSeek's model family** — open-weight, competitively priced, and credible for serious reasoning and coding work — on top of which anyone can hire, configure, and run a roster of persistent AI co-workers, give them tools and knowledge, let them work solo or in teams, and own every byte of the resulting memory and workflow data. Building on an open-weight model family, rather than a closed one, means the platform's foundation is consistent with its own open-source-first principle: today Agentarium calls DeepSeek's cloud API, and the same model family is designed to be run fully self-hosted the moment that path is built out (see `SOUL.md` §16.2) — no re-platforming required to get there.
+Deep-Foundry exists to close that gap: an **open source AI operating system built specifically on DeepSeek's model family** — open-weight, competitively priced, and credible for serious reasoning and coding work — on top of which anyone can hire, configure, and run a roster of persistent AI co-workers, give them tools and knowledge, let them work solo or in teams, and own every byte of the resulting memory and workflow data. Building on an open-weight model family, rather than a closed one, means the platform's foundation is consistent with its own open-source-first principle: today Deep-Foundry calls DeepSeek's cloud API, and the same model family is designed to be run fully self-hosted the moment that path is built out (see `SOUL.md` §16.2) — no re-platforming required to get there.
 
 ### 1.2 What problem it solves
 
-| Problem today | Agentarium's answer |
+| Problem today | Deep-Foundry's answer |
 |---|---|
 | AI conversations are stateless and disposable | Persistent coworkers with durable memory across sessions |
 | Closed-weight models mean you can never actually own your AI stack, only rent access to it | Built on DeepSeek's open-weight model family — cloud-hosted today, self-hostable by design, so "owning your stack" is a real, reachable state rather than a marketing phrase |
@@ -63,7 +63,7 @@ Agentarium exists to close that gap: an **open source AI operating system built 
 
 ### 1.3 Long-term vision
 
-Agentarium becomes the default place people go to build and run an AI workforce on open models — the way WordPress became the default place to run a website, or GitHub the default place to host code. Not a single product with a single opinion, but an **operating system**: a kernel (model router, memory, permissions, task engine) plus an ecosystem (marketplace, SDK, capability packs) that others build on top of.
+Deep-Foundry becomes the default place people go to build and run an AI workforce on open models — the way WordPress became the default place to run a website, or GitHub the default place to host code. Not a single product with a single opinion, but an **operating system**: a kernel (model router, memory, permissions, task engine) plus an ecosystem (marketplace, SDK, capability packs) that others build on top of.
 
 In its mature form:
 
@@ -81,7 +81,7 @@ In its mature form:
 1. **Coworkers, not chatbots.** The unit of interaction is a persistent entity with a role and memory, not a conversation thread.
 2. **Composable by default.** Skills, tools, knowledge, and workflows are independent, attachable units — never hardcoded into a single monolithic agent.
 3. **Trust is earned through visibility, not assumed.** Every autonomous action is logged, explainable, and — where consequential — gated behind human approval.
-4. **The platform is a kernel, not a cage.** Agentarium's job is to provide primitives (memory, permissions, routing, orchestration) and get out of the way of what people build on top.
+4. **The platform is a kernel, not a cage.** Deep-Foundry's job is to provide primitives (memory, permissions, routing, orchestration) and get out of the way of what people build on top.
 5. **No second-class self-hosted mode.** Whatever ships in the cloud product ships in the self-hosted product, on the same release cadence, under the same license terms for the core.
 
 ### 1.6 Design principles
@@ -99,9 +99,9 @@ In its mature form:
 
 - Ship a single-user, self-hostable core: create a coworker, chat with it, attach a knowledge base, run it against DeepSeek's cloud API with reliable tool-calling.
 - Ship the Model Router as the single call path to DeepSeek (chat + reasoning models, e.g. DeepSeek-V3 and DeepSeek-R1), architected so a self-hosted DeepSeek inference adapter can be added later without touching calling code (`SOUL.md` §16.2).
-- Ship a minimal Skills system (prompt + tool bundle, locally defined, no marketplace yet).
+- Ship a useful built-in Tool set (web search, file read/write, code execution); private Skill authoring remains V2 with the Developer SDK.
 - Ship a working Memory system (per-coworker + per-user, vector-search backed).
-- Ship human-approval gates for any tool call classified as "sensitive" (file writes, network calls, financial actions, sends).
+- Ship non-bypassable human-approval gates for every `dangerous` tool call, with `sensitive` actions configurable between automatic and approval-required under an organization strictness floor.
 - Validate the "coworker" mental model with real users (target: 50 self-hosted installs or design-partner teams providing structured feedback).
 
 ### 2.2 Medium-term goals (6–18 months / V2)
@@ -146,7 +146,7 @@ These are load-bearing and should be cited by name in design reviews and PR desc
 4. **Everything should be versioned.** Coworker configurations, skills, workflows, and capability packs carry version history with diffing and rollback.
 5. **Everything should be forkable.** Any shared or marketplace object can be duplicated into a user's own workspace and modified without affecting the original or requiring permission from the original author.
 6. **Community first.** Design decisions favor what strengthens the open ecosystem (marketplace, SDK, self-hosting) over what maximizes short-term platform lock-in.
-7. **Built on open models, deployment-agnostic.** Agentarium is built specifically on DeepSeek's model family, not a generic multi-vendor abstraction — but no feature may be built in a way that only works with DeepSeek's *cloud* service specifically. The Model Router's job is to make cloud-hosted and (once built) self-hosted DeepSeek inference interchangeable from the calling code's perspective, so choosing where the model runs is a deployment decision, not a re-architecture.
+7. **Built on open models, deployment-agnostic.** Deep-Foundry is built specifically on DeepSeek's model family, not a generic multi-vendor abstraction — but no feature may be built in a way that only works with DeepSeek's *cloud* service specifically. The Model Router's job is to make cloud-hosted and (once built) self-hosted DeepSeek inference interchangeable from the calling code's perspective, so choosing where the model runs is a deployment decision, not a re-architecture.
 8. **Open source first.** The core platform (coworkers, memory, model router, workflow engine, permissions) is open source. Commercial offerings (hosted cloud, enterprise features, managed marketplace payments) are additive layers, never forks that withhold core capability.
 9. **Privacy first.** User and organization data — memory, conversation history, knowledge bases — is never used to train shared models without explicit, revocable, opt-in consent. Data belongs to the workspace that created it.
 10. **Local-first where possible.** Local model execution (self-hosted DeepSeek inference, once built — see `SOUL.md` §16.2) and local data storage are supported as first-class deployment targets, not afterthoughts bolted onto a cloud-only architecture.
@@ -240,10 +240,10 @@ A multi-user Workspace variant with membership, roles, shared billing, and org-w
 Within an Organization, a sub-grouping of human members (not to be confused with Agent Teams) with shared access to a subset of Projects, Coworkers, and Knowledge Bases — mirrors how departments work inside a real company.
 
 ### 4.25 Billing
-Usage-based and/or seat-based billing for the hosted cloud offering: model token consumption (pass-through or marked-up, transparently disclosed), marketplace revenue share, and platform subscription tiers. Self-hosted deployments bring their own model provider billing and owe Agentarium nothing unless they opt into paid marketplace content or managed hosting.
+Usage-based and/or seat-based billing for the hosted cloud offering: model token consumption (pass-through or marked-up, transparently disclosed), marketplace revenue share, and platform subscription tiers. Self-hosted deployments bring their own model provider billing and owe Deep-Foundry nothing unless they opt into paid marketplace content or managed hosting.
 
 ### 4.26 Cloud vs. Self-hosted
-Agentarium ships as:
+Deep-Foundry ships as:
 - **Self-hosted (core, open source):** Deployable via Dokploy (recommended, Docker Compose-based) or Kubernetes, full feature parity with cloud minus managed billing and managed marketplace payment processing, bring your own DeepSeek API key (or, once built, self-hosted DeepSeek inference — `SOUL.md` §16.2).
 - **Cloud (hosted, commercial):** Managed infrastructure, optional managed billing for model usage, managed marketplace with payment processing, SSO/enterprise add-ons. Built on the same open source core with no forked feature set.
 
@@ -257,7 +257,7 @@ Each module is a bounded context with its own data ownership, though modules com
 - **Purpose:** Establish and verify identity for users and, transitively, workspaces/organizations.
 - **Responsibilities:** Email/password, OAuth (Google, GitHub, Microsoft), SSO/SAML (enterprise), session management, MFA, API token issuance for the Developer SDK.
 - **Dependencies:** None (foundational).
-- **Future expansion:** Passkeys/WebAuthn, SCIM provisioning for enterprise, "Sign in with Vercel"-style third-party OAuth provider role (Agentarium as an identity provider for its own ecosystem apps).
+- **Future expansion:** Passkeys/WebAuthn, SCIM provisioning for enterprise, "Sign in with Vercel"-style third-party OAuth provider role (Deep-Foundry as an identity provider for its own ecosystem apps).
 
 ### 5.2 Workspace
 - **Purpose:** Tenant boundary and top-level resource container.
@@ -400,7 +400,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | Shared org coworkers | V2 |
 | Coworker export/import bundles | V3 |
 | Coworker templates marketplace | V3 |
-| Self-proposed skill gap requests | Research |
+| Self-proposed skill gap requests | V4 |
 
 ### 6.3 Chat & Interaction
 
@@ -416,7 +416,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | Voice input/output | V2 |
 | Real-time multi-human collaborative chat | V3 |
 | Video understanding in chat | V3 |
-| Real-time voice-to-voice | Research |
+| Real-time voice-to-voice | V4 |
 
 ### 6.4 Memory & Knowledge
 
@@ -432,7 +432,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | URL/web-page knowledge ingestion with re-crawl | V2 |
 | Automatic memory summarization/compaction | V3 |
 | Cross-coworker shared memory negotiation | V3 |
-| Memory conflict resolution | Research |
+| Memory conflict resolution | V4 |
 
 ### 6.5 Agent Teams & Workflows
 
@@ -448,14 +448,14 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | Workflow template marketplace | V2 |
 | Visual workflow builder | V3 |
 | Conditional branching on coworker judgment | V3 |
-| Voting/consensus among coworkers | Research |
+| Voting/consensus among coworkers | V4 |
 
 ### 6.6 Skills, Tools & Marketplace
 
 | Feature | Priority |
 |---|---|
 | Built-in first-party skills (web search, file read/write, code execution) | MVP |
-| Local/private skill authoring | MVP |
+| Local/private skill authoring | V2 |
 | Tool permission classification (safe/sensitive/dangerous) | MVP |
 | Public marketplace browse/install | V2 |
 | Skill forking | V2 |
@@ -469,7 +469,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 
 | Feature | Priority |
 |---|---|
-| First-party starter packs (e.g., Personal Assistant, Developer) | MVP |
+| First-party starter packs (e.g., Personal Assistant, Developer) | V2 |
 | Pack install (coworkers + skills + knowledge templates + workflows in one action) | V2 |
 | Community-published packs | V2 |
 | Pack forking and customization | V2 |
@@ -613,7 +613,7 @@ A Capability Pack is the "batteries-included" install unit: a coordinated bundle
 
 | Pack | Contents highlight | Priority |
 |---|---|---|
-| Personal Assistant | Assistant coworker + calendar/email skills + task planning workflow | MVP |
+| Personal Assistant | Assistant coworker + calendar/email skills + task planning workflow | V2 |
 | Django Developer | Dev + Tester + Reviewer coworkers, terminal/file/git tools, framework-specific knowledge | V2 |
 | Python Developer | Similar to above, general-purpose Python tooling | V2 |
 | Next.js Developer | Frontend-focused dev team, browser automation for visual QA | V2 |
@@ -715,7 +715,7 @@ Full detail lives in `SECURITY.md`.
 ## 16. Model Router
 
 ### 16.1 Mandate
-No application code — UI, Coworker logic, Skills, Workflows — ever calls DeepSeek's API directly. Everything routes through the Model Router's internal interface. Agentarium is built specifically on DeepSeek's model family (per `SOUL.md` §3 principle 7) rather than abstracting across vendors — but the Router still exists as a hard choke point, because the thing it needs to abstract is *where DeepSeek inference runs* (cloud vs. self-hosted), not *which company made the model*. This is the architectural guarantee behind "own your stack, don't just rent it."
+No application code — UI, Coworker logic, Skills, Workflows — ever calls DeepSeek's API directly. Everything routes through the Model Router's internal interface. Deep-Foundry is built specifically on DeepSeek's model family (per `SOUL.md` §3 principle 7) rather than abstracting across vendors — but the Router still exists as a hard choke point, because the thing it needs to abstract is *where DeepSeek inference runs* (cloud vs. self-hosted), not *which company made the model*. This is the architectural guarantee behind "own your stack, don't just rent it."
 
 ### 16.2 Supported deployment modes
 
@@ -800,7 +800,7 @@ Django/DRF gives the core modules (auth, RBAC, billing, marketplace) a mature, b
 
 ## 20. Development Rules
 
-These rules bind every future contributor, human or AI, working on Agentarium.
+These rules bind every future contributor, human or AI, working on Deep-Foundry.
 
 1. **Every feature requires documentation.** No feature merges without an update to the relevant document in this set (`SOUL.md` if conceptual, `ARCHITECTURE.md`/`DATABASE.md`/`API.md` if structural, `UI_GUIDELINES.md` if user-facing).
 2. **Every API documented.** Every endpoint has a documented contract in `API.md` before or alongside implementation — never discovered after the fact from source code.

@@ -1,6 +1,6 @@
 ## IMPLEMENTATION_PLAN.md
 
-# Agentarium — MVP Implementation Plan
+# Deep-Foundry — MVP Implementation Plan
 
 > Downstream of every other document. Scope is **Phase 1 / MVP** as defined in `ROADMAP.md`. Do not begin implementation until this plan is reviewed and approved — per the original mandate, architecture and planning precede code. Milestones are dependency-ordered; epics within a milestone can generally proceed in parallel once that milestone's foundation lands.
 
@@ -56,7 +56,7 @@ Every epic references the doc sections it must stay consistent with. No task her
 ### Epic 1.1 — Authentication
 *Refs: `SOUL.md` §5.1, §6.1; `API.md` §2; `SECURITY.md` §2*
 
-- **Story:** As a new user, I want to sign up with email/password or Google OAuth, so that I can start using Agentarium without friction.
+- **Story:** As a new user, I want to sign up with email/password or Google OAuth, so that I can start using Deep-Foundry without friction.
   - Task: Registration/login/logout/refresh endpoints (`API.md` §2), Argon2id password hashing (`SECURITY.md` §2).
   - Task: Google OAuth flow (callback handling, identity linking).
   - Task: Session/JWT issuance with refresh-token rotation.
@@ -135,7 +135,7 @@ Every epic references the doc sections it must stay consistent with. No task her
 *Refs: `SOUL.md` §4.6–4.8; `DATABASE.md` §2.2*
 
 - **Story:** As a user, I want to attach built-in tools to my coworker, so that it can actually do things beyond talk.
-  - Task: `tools` catalog table + seed data for built-in tools (web search, file read/write stub, code execution).
+  - Task: `tools` catalog table + seed data for built-in tools (web search, workspace-scoped file read/write, sandboxed code execution).
   - Task: `coworker_tool_attachments` CRUD + endpoints.
   - Task: Web app: attach/detach tools UI in coworker config panel.
 
@@ -290,6 +290,16 @@ M0 Foundation
 
 M2 (Model Router) can proceed in parallel with M1's later tasks once M0 is done, since it has no dependency on auth beyond the internal service contract. M4's Approval Gate epic (4.3) is the first point where `SECURITY.md`'s core invariant becomes real and testable — treat it as the milestone's critical path item, not a nice-to-have appended at the end.
 
-## Next Step
+## Completion Status
 
-This plan requires explicit approval before Milestone 0 implementation begins, per the original directive: architecture and planning complete and internally consistent before any application code is written.
+Phase 1 Milestones 0–8 are implemented. The maintained release acceptance steps
+are in `SELF_HOSTING.md`; future implementation work proceeds from Phase 2 in
+`ROADMAP.md`.
+
+Phase 2 and Phase 3 are now implemented. Detailed acceptance paths and operator
+configuration are maintained in `PHASE2_IMPLEMENTATION.md` and
+`PHASE3_IMPLEMENTATION.md`.
+
+Phase 4 is implemented from the former research track. Its concrete scope,
+acceptance paths, provider limitations, and security invariants are maintained in
+`PHASE4_IMPLEMENTATION.md`.

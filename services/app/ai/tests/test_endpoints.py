@@ -53,7 +53,7 @@ class EndpointTestBase(TransactionTestCase):
 
 class AuthAndMembershipTests(EndpointTestBase):
     def _payload(self):
-        return {"workspace_id": str(self.workspace.id), "model_id": "deepseek-chat", "messages": []}
+        return {"workspace_id": str(self.workspace.id), "model_id": "deepseek-v4-flash", "messages": []}
 
     def test_generate_requires_authentication(self):
         response = self.client.post("/internal/generate", json=self._payload())
@@ -85,7 +85,7 @@ class GenerateEndpointTests(EndpointTestBase):
     def test_generate_returns_normalized_response(self, mock_post):
         mock_post.return_value = {
             "id": "x",
-            "model": "deepseek-chat",
+            "model": "deepseek-v4-flash",
             "choices": [{"message": {"content": "Hello!"}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 4, "completion_tokens": 2},
         }
@@ -93,7 +93,7 @@ class GenerateEndpointTests(EndpointTestBase):
             "/internal/generate",
             json={
                 "workspace_id": str(self.workspace.id),
-                "model_id": "deepseek-chat",
+                "model_id": "deepseek-v4-flash",
                 "messages": [{"role": "user", "content": "hi"}],
             },
             headers=self._headers(),
@@ -108,7 +108,7 @@ class GenerateEndpointTests(EndpointTestBase):
     def test_generate_with_tools_against_tool_capable_model_succeeds(self, mock_post):
         mock_post.return_value = {
             "id": "x",
-            "model": "deepseek-reasoner",
+            "model": "deepseek-v4-pro",
             "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 1, "completion_tokens": 1},
         }
@@ -116,7 +116,7 @@ class GenerateEndpointTests(EndpointTestBase):
             "/internal/generate",
             json={
                 "workspace_id": str(self.workspace.id),
-                "model_id": "deepseek-reasoner",
+                "model_id": "deepseek-v4-pro",
                 "messages": [{"role": "user", "content": "hi"}],
                 "tools": [{"name": "t", "description": "d", "parameters": {}}],
             },
@@ -148,7 +148,7 @@ class GenerateEndpointTests(EndpointTestBase):
             "/internal/generate",
             json={
                 "workspace_id": str(self.workspace.id),
-                "model_id": "deepseek-chat",
+                "model_id": "deepseek-v4-flash",
                 "messages": [{"role": "user", "content": "hi"}],
             },
             headers=self._headers(),
@@ -178,7 +178,7 @@ class StreamEndpointTests(EndpointTestBase):
             "/internal/generate/stream",
             json={
                 "workspace_id": str(self.workspace.id),
-                "model_id": "deepseek-chat",
+                "model_id": "deepseek-v4-flash",
                 "messages": [{"role": "user", "content": "hi"}],
             },
             headers=self._headers(),
