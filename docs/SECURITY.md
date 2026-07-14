@@ -42,10 +42,19 @@ This is Agentarium's central trust mechanism and deserves restating precisely fr
 
 ## 5. Sandboxing
 
+The Phase 1 self-hosted implementation uses a dedicated Docker-in-Docker daemon
+on a private Compose control network. The application does not receive the host's
+Docker socket. Each approved Python call is created through the daemon API as a
+new child container and is force-removed after completion or timeout.
+
 - Every Tool call that executes code or shell commands runs in an ephemeral, isolated container/microVM, provisioned per call — whether triggered synchronously from a live chat request in the application process or asynchronously by a Celery worker running a Task/Workflow step — and destroyed immediately after (`ARCHITECTURE.md` §7).
 - **Default-deny network egress.** A sandbox has zero outbound network access unless the specific Tool's manifest declares a required egress target (e.g., a `web_search` tool is allowlisted to the search provider's API only).
 - **Resource limits:** CPU, memory, execution time, and disk are capped per sandbox invocation; a runaway process is killed and reported as a failed Tool call, not left to consume resources indefinitely.
 - **No sandbox-to-sandbox communication** and no access to the host's credentials, other workspaces' data, or the platform's own internal network by default.
+- The controller daemon requires a privileged container on the self-hosted host;
+  its TCP API must never be published. This isolates child-container control from
+  the host daemon while keeping the privileged controller itself inside the
+  operator's infrastructure trust boundary.
 
 ## 6. Secrets Management
 
@@ -67,7 +76,7 @@ Unlisted/org-private skills skip the marketplace review queue (they aren't publi
 
 ## 8. Audit Logging
 
-- `audit_log` (`DATABASE.md` §2.3) is append-only at the application layer — no `UPDATE`/`DELETE` code path targets this table, and database-level permissions on the production role used by the application should enforce `INSERT`-only access as a defense-in-depth measure.
+- `audit_log` (`DATABASE.md` §2.3) is append-only at both layers: application code exposes no mutation path and a PostgreSQL trigger rejects every `UPDATE` or `DELETE`, including direct ORM/SQL attempts. Retention deletion requires an explicit privileged migration that removes the guard.
 - Captures: every tool call, every model call (via `model_calls`), every approval decision, every permission/policy change, every RBAC role change, every marketplace install.
 - Exportable by workspace Owners/Admins for compliance purposes (`GET /api/v1/workspaces/{ws}/audit-log`, `API.md` §9).
 - Retention is workspace-configurable but has a platform-enforced minimum (default 90 days) that cannot be set to zero — an org cannot use the retention setting to make its own audit trail disappear on demand.
@@ -84,9 +93,13 @@ Unlisted/org-private skills skip the marketplace review queue (they aren't publi
 - A documented responsible-disclosure process (security contact, expected response SLA) is published alongside the open source repository from MVP launch — a security-sensitive product without a disclosure path is a liability from day one, not a V2 nicety.
 - Incident response plan (for the hosted cloud offering) defines: detection (audit log anomaly monitoring, per `SOUL.md` §6.11 V3 "anomaly detection" item, is the long-term direction; MVP relies on standard infra alerting), containment (workspace-level credential revocation/coworker suspension capability for platform operators in a confirmed-compromise scenario), and disclosure timeline commitments to affected workspaces.
 
+Report vulnerabilities through the repository host's private vulnerability-reporting form (GitHub: **Security → Report a vulnerability**). Do not include exploit details in a public issue. Maintainers acknowledge reports within three business days, provide a triage/status update within seven days, coordinate remediation and disclosure with the reporter, and credit reporters who opt in. If private reporting is unavailable, contact a maintainer privately and request a secure reporting channel before sending sensitive details.
+
 ## 11. Self-Hosted Security Posture
 
 Because self-hosted deployments run the identical codebase (`SOUL.md` §4.26, `ARCHITECTURE.md` §8.1), every control in this document applies equally there — self-hosting is not a reduced-security mode. The operator takes on responsibility for infrastructure-level controls (TLS termination, network isolation, database backup security, master key custody) that the cloud offering handles on the operator's behalf; the application-layer controls (permission system, sandboxing, audit logging) are identical and not configurable-away.
+
+The supported bootstrap and operations procedure is [SELF_HOSTING.md](SELF_HOSTING.md). Production mode fails closed on debug mode, placeholder secrets, wildcard hosts, invalid master keys, and default database/object-store passwords. Operators must keep the generated master key separately recoverable, schedule encrypted off-host backups for PostgreSQL and MinIO, test restores, expose only TLS entrypoints, and enable MFA on owner/admin accounts.
 
 ## 12. Security Principles Recap
 
@@ -97,3 +110,39 @@ Every control above exists to serve one of these; when a new feature raises a se
 3. Self-hosted is not a lesser security tier.
 4. Trust is granted explicitly (consent screens, manifest declarations) and revocable, never ambient.
 5. A compromised or malicious third-party Skill is contained by sandboxing and the approval gate, not by trusting the review pipeline as the only line of defense.
+## 12. Phase 3 enterprise controls
+
+- Delegated enterprise roles are capability-mapped; a security administrator
+  cannot manage billing and a billing administrator cannot change SSO or policy.
+- SCIM and SDK credentials are separately hashed, scoped, revocable tokens. Their
+  plaintext value is returned only at creation.
+- OIDC uses authorization-code exchange. The SAML integration trusts only a
+  configured identity gateway that has already validated XML signatures; the
+  gateway assertion is independently protected by signed state and HMAC, and
+  Agentarium validates issuer, audience, domain, and freshness.
+- Organization rules are evaluated in priority order and enforced at all three
+  tool execution entrypoints: interactive chat, background tasks, and workflows.
+- Compliance and portable-coworker exports exclude encrypted credentials,
+  integration secrets, private memory, and tool configuration. Canonical export
+  content is protected with SHA-256 for later evidence verification.
+- Payment and incoming integration webhooks use constant-time HMAC comparison.
+  Paid packages are not installed until a signed completion event marks an order
+  paid. Creator proceeds are an append-only ledger derived from the paid order.
+- Conditional workflows support a fixed declarative operator set and never pass
+  policy or workflow expressions to `eval`, a shell, or a model for execution.
+
+## 13. Phase 4 adaptive controls
+
+- Capability proposals are non-authorizing records. Only workspace Owners/Admins
+  can approve, and an installed skill or existing tool is revalidated inside the
+  same database transaction before attachment. Duplicate/open review races lock
+  the proposal row and fail closed.
+- `propose_capability` is classified safe because it grants nothing; any later
+  tool execution still uses that tool's own risk class and normal approval rules.
+- Consensus output is advisory and auditable. Every vote is attributed to a
+  coworker and task; invalid output produces no vote, and ties/unanimity failures
+  are surfaced as deadlocks rather than silently resolved.
+- Voice sessions store text transcripts, not raw audio. They are readable only by
+  the initiating user, and speech never bypasses chat authorization or approval.
+- Conflict resolution preserves both original memories and writes a linked
+  resolved statement to each affected coworker scope, retaining provenance.

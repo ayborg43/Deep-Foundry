@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentarium-sdk"
+version = "0.1.0"
+description = "Validate, test, and publish Agentarium skills and capability packs."
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+
+[project.scripts]
+agentarium = "agentarium_sdk.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentarium_sdk"]

@@ -4,7 +4,7 @@ from django.core import signing
 from django.core.signing import BadSignature, SignatureExpired
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -12,19 +12,36 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+import core.coworkers as coworker_service
 from core.encryption import decrypt_from_text, encrypt_to_bytes, encrypt_to_text
 from core.google_oauth import GoogleOAuthError, exchange_code_for_tokens, fetch_userinfo
 from core.interface import write_audit_log
-from core.models import OAuthIdentity, ProviderCredential, User, Workspace
-from core.permissions import IsWorkspaceMember, get_workspace_for_member
+from core.models import (
+    Coworker,
+    CoworkerToolAttachment,
+    OAuthIdentity,
+    ProviderCredential,
+    Team,
+    Tool,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
+from core.permissions import IsWorkspaceMember, get_coworker_for_member, get_workspace_for_member
 from core.provisioning import provision_personal_workspace
 from core.serializers import (
+    CoworkerCreateSerializer,
+    CoworkerSerializer,
+    CoworkerToolAttachmentSerializer,
+    CoworkerUpdateSerializer,
+    CoworkerVersionSerializer,
     GoogleOAuthCallbackSerializer,
     LoginSerializer,
     MFAEnrollConfirmSerializer,
     MFALoginVerifySerializer,
     ProviderCredentialSerializer,
     RegisterSerializer,
+    ToolSerializer,
     UserSerializer,
     WorkspaceSerializer,
 )
@@ -55,6 +72,18 @@ def _error(code: str, message: str, http_status: int, details: dict | None = Non
     )
 
 
+def _personal_workspace_id(user: User) -> str | None:
+    """Account-level events (login, MFA) aren't scoped to a workspace by the
+    request. Most users have a PERSONAL workspace from registration
+    (provision_personal_workspace) — use it as the natural home for these
+    when it exists; AuditLog.workspace is nullable for the users who don't
+    (e.g. guest-only members, or fixtures that skip provisioning)."""
+    workspace = Workspace.objects.filter(
+        owner=user, type=Workspace.WorkspaceType.PERSONAL
+    ).first()
+    return workspace.id if workspace else None
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -69,7 +98,7 @@ class RegisterView(APIView):
         workspace = provision_personal_workspace(user)
         write_audit_log(
             actor_type="user", actor_id=user.id, action="user.register",
-            resource_type="user", resource_id=user.id,
+            resource_type="user", resource_id=user.id, workspace_id=workspace.id,
         )
         return Response(
             {
@@ -100,7 +129,7 @@ class LoginView(APIView):
 
         write_audit_log(
             actor_type="user", actor_id=user.id, action="user.login",
-            resource_type="user", resource_id=user.id,
+            resource_type="user", resource_id=user.id, workspace_id=_personal_workspace_id(user),
         )
         return Response({"tokens": _issue_tokens(user)})
 
@@ -152,7 +181,7 @@ class MFAEnrollConfirmView(APIView):
         user.save(update_fields=["mfa_enabled"])
         write_audit_log(
             actor_type="user", actor_id=user.id, action="user.mfa_enabled",
-            resource_type="user", resource_id=user.id,
+            resource_type="user", resource_id=user.id, workspace_id=_personal_workspace_id(user),
         )
         return Response({"mfa_enabled": True})
 
@@ -188,7 +217,7 @@ class MFAVerifyView(APIView):
 
         write_audit_log(
             actor_type="user", actor_id=user.id, action="user.login_mfa",
-            resource_type="user", resource_id=user.id,
+            resource_type="user", resource_id=user.id, workspace_id=_personal_workspace_id(user),
         )
         return Response({"tokens": _issue_tokens(user)})
 
@@ -238,7 +267,7 @@ class GoogleOAuthCallbackView(APIView):
 
         write_audit_log(
             actor_type="user", actor_id=user.id, action="user.login_google",
-            resource_type="user", resource_id=user.id,
+            resource_type="user", resource_id=user.id, workspace_id=workspace.id,
         )
         return Response(
             {
@@ -291,9 +320,10 @@ class ProviderCredentialListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer: ProviderCredentialSerializer) -> None:
         api_key = serializer.validated_data.pop("api_key", None)
-        if not api_key:
-            raise ValidationError({"api_key": "This field is required."})
-        serializer.save(workspace=self._workspace(), encrypted_key=encrypt_to_bytes(api_key))
+        serializer.save(
+            workspace=self._workspace(),
+            encrypted_key=encrypt_to_bytes(api_key) if api_key else None,
+        )
 
 
 class ProviderCredentialDestroyView(generics.DestroyAPIView):
@@ -304,3 +334,189 @@ class ProviderCredentialDestroyView(generics.DestroyAPIView):
         return get_object_or_404(
             ProviderCredential, workspace=workspace, id=self.kwargs["cred_id"]
         )
+
+
+class ToolCatalogListView(generics.ListAPIView):
+    """GET /api/v1/tools — the platform-wide catalog (DATABASE.md §2.3),
+    not documented in API.md's original Coworkers section but needed for
+    any attach-a-tool UI to show what's attachable. Added alongside the
+    rest of Milestone 3, same pattern as Milestone 1's /workspaces list."""
+
+    serializer_class = ToolSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Tool.objects.all().order_by("name")
+
+
+class CoworkerListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, workspace_id: str) -> Response:
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        coworkers = (
+            Coworker.objects.filter(workspace=workspace, status=Coworker.Status.ACTIVE)
+            .select_related("current_version__permission_profile")
+            .prefetch_related("tool_attachments__tool")
+            .order_by("-created_at")
+        )
+        return Response(CoworkerSerializer(coworkers, many=True).data)
+
+    def post(self, request: Request, workspace_id: str) -> Response:
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        serializer = CoworkerCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        owner_type = data.get("owner_type", Coworker.OwnerType.USER)
+        owner_id = data.get("owner_id")
+        if owner_type == Coworker.OwnerType.USER:
+            if owner_id is not None and owner_id != request.user.id:
+                raise ValidationError({"owner_id": "A personal coworker must be owned by you."})
+            owner_id = request.user.id
+        else:
+            membership = WorkspaceMember.objects.get(workspace=workspace, user=request.user)
+            if membership.role not in (WorkspaceMember.Role.OWNER, WorkspaceMember.Role.ADMIN):
+                raise PermissionDenied("Only workspace Owner/Admin can create shared coworkers.")
+            if owner_type == Coworker.OwnerType.ORGANIZATION:
+                if workspace.type != Workspace.WorkspaceType.ORGANIZATION:
+                    raise ValidationError({"owner_type": "This workspace is not an organization."})
+                owner_id = workspace.id
+            elif not Team.objects.filter(id=owner_id, workspace=workspace).exists():
+                raise ValidationError({"owner_id": "Team not found in this workspace."})
+
+        coworker = coworker_service.create_coworker(
+            workspace=workspace,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            created_by=request.user,
+            name=data["name"],
+            role_description=data["role_description"],
+            model_binding=data["model_binding"],
+            avatar_url=data.get("avatar_url"),
+        )
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="coworker.create",
+            resource_type="coworker", resource_id=coworker.id, workspace_id=workspace.id,
+        )
+        return Response(CoworkerSerializer(coworker).data, status=status.HTTP_201_CREATED)
+
+
+class CoworkerDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, coworker_id: str) -> Response:
+        coworker = get_coworker_for_member(request.user, coworker_id)
+        return Response(CoworkerSerializer(coworker).data)
+
+    def patch(self, request: Request, coworker_id: str) -> Response:
+        coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
+        serializer = CoworkerUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        name = data.get("name")
+        avatar_url = data.get("avatar_url")
+        if name is not None or avatar_url is not None:
+            if name is not None:
+                coworker.name = name
+            if avatar_url is not None:
+                coworker.avatar_url = avatar_url
+            coworker.save(update_fields=["name", "avatar_url", "updated_at"])
+
+        if "role_description" in data or "model_binding" in data:
+            coworker_service.create_new_version(
+                coworker,
+                created_by=request.user,
+                role_description=data.get("role_description"),
+                model_binding=data.get("model_binding"),
+                changelog=data.get("changelog"),
+            )
+            coworker.refresh_from_db()
+
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="coworker.update",
+            resource_type="coworker", resource_id=coworker.id, workspace_id=coworker.workspace_id,
+        )
+        return Response(CoworkerSerializer(coworker).data)
+
+    def delete(self, request: Request, coworker_id: str) -> Response:
+        coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
+        coworker.status = Coworker.Status.ARCHIVED
+        coworker.save(update_fields=["status", "updated_at"])
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="coworker.archive",
+            resource_type="coworker", resource_id=coworker.id, workspace_id=coworker.workspace_id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CoworkerVersionsView(generics.ListAPIView):
+    serializer_class = CoworkerVersionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        coworker = get_coworker_for_member(self.request.user, self.kwargs["coworker_id"])
+        return coworker.versions.select_related("permission_profile", "created_by")
+
+
+class CoworkerVersionRollbackView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, coworker_id: str, version_number: int) -> Response:
+        coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
+        target = get_object_or_404(
+            coworker.versions, version_number=version_number
+        )
+        new_version = coworker_service.rollback_to_version(
+            coworker, target, created_by=request.user
+        )
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="coworker.rollback",
+            resource_type="coworker", resource_id=coworker.id, workspace_id=coworker.workspace_id,
+            metadata={"rolled_back_to": version_number, "new_version": new_version.version_number},
+        )
+        coworker.refresh_from_db()
+        return Response(CoworkerSerializer(coworker).data)
+
+
+class CoworkerToolAttachView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, coworker_id: str) -> Response:
+        coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
+        serializer = CoworkerToolAttachmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        attachment, created = CoworkerToolAttachment.objects.update_or_create(
+            coworker=coworker,
+            tool=serializer.validated_data["tool"],
+            defaults={
+                "config": serializer.validated_data.get("config", {}),
+                "enabled": serializer.validated_data.get("enabled", True),
+            },
+        )
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="coworker.tool_attach",
+            resource_type="coworker", resource_id=coworker.id, workspace_id=coworker.workspace_id,
+            metadata={"tool_id": str(attachment.tool_id)},
+        )
+        return Response(
+            CoworkerToolAttachmentSerializer(attachment).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class CoworkerToolDetachView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, coworker_id: str, tool_id: str) -> Response:
+        coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
+        attachment = get_object_or_404(
+            CoworkerToolAttachment, coworker=coworker, tool_id=tool_id
+        )
+        attachment.delete()
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="coworker.tool_detach",
+            resource_type="coworker", resource_id=coworker.id, workspace_id=coworker.workspace_id,
+            metadata={"tool_id": str(tool_id)},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -82,7 +82,7 @@
 
 **`org_policy_floors`** — `id, workspace_id FK, tool_risk_classification enum, min_required_policy enum(approval), enforced boolean default true` — implements the "org policy floor that coworker config cannot loosen" guarantee from [SOUL.md §15.2](SOUL.md#152-the-permission--approval-system).
 
-**`approval_requests`** — `id, task_id FK nullable, workflow_run_step_id FK nullable, coworker_id FK, tool_id FK, requested_action jsonb, status enum(pending,approved,denied,expired), decided_by uuid FK users nullable, decided_at timestamptz nullable, created_at`
+**`approval_requests`** — `id, task_id FK nullable, workflow_run_step_id FK nullable, conversation_id FK nullable, message_id FK nullable, coworker_id FK, tool_id FK, requested_action jsonb, status enum(pending,approved,denied,expired), decided_by uuid FK users nullable, decided_at timestamptz nullable, created_at` — `conversation_id`/`message_id` added during Milestone 4: a chat-originated tool call has neither a Task nor a Workflow step to hang off of (those don't exist until Milestone 6) but still needs to record *what it's blocking*, so the approval request points at the in-flight chat message instead. Exactly one of `task_id`/`workflow_run_step_id`/`message_id` is populated per row, never more than one.
 
 **`audit_log`** *(append-only, immutable — no update/delete path in application code)* — `id, workspace_id FK, actor_type enum(user,coworker,system), actor_id uuid, action text, resource_type text, resource_id uuid, metadata jsonb, created_at` — indexed on `(workspace_id, created_at)` for admin audit views per [SOUL.md §5.8](SOUL.md#58-admin).
 
@@ -122,13 +122,13 @@
 
 **`workflow_run_steps`** — `id, workflow_run_id FK, step_index int, step_type enum(coworker_action,tool_call,human_checkpoint), status enum(pending,in_progress,needs_approval,completed,failed,skipped), result jsonb nullable, started_at, completed_at nullable`
 
-**`tasks`** — `id, workspace_id FK, project_id FK nullable, coworker_id FK (assignee), created_by_type enum(user,coworker,workflow), created_by_id uuid, title, description, status enum(pending,in_progress,needs_approval,blocked,completed,failed), due_at timestamptz nullable, parent_task_id uuid FK nullable (delegation from a Manager coworker per SOUL.md §9.2), created_at, completed_at nullable`
+**`tasks`** — `id, workspace_id FK, project_id FK nullable, coworker_id FK (assignee), created_by_type enum(user,coworker,workflow), created_by_id uuid, title, description, status enum(pending,in_progress,needs_approval,blocked,completed,failed), due_at timestamptz nullable, parent_task_id uuid FK nullable (delegation from a Manager coworker per SOUL.md §9.2), execution_state jsonb, result text, error_message text, created_at, updated_at, completed_at nullable`. `execution_state` contains the normalized model/tool transcript so approval resumes and Celery redeliveries do not depend on worker memory.
 
 ### 2.7 Billing
 
 **`provider_credentials`** — `id, workspace_id FK, deployment_mode enum(deepseek_cloud, deepseek_self_hosted), encrypted_key bytea nullable (the DeepSeek Cloud API key; null for deepseek_self_hosted), endpoint_url text nullable (the self-hosted inference endpoint; null for deepseek_cloud), label text, is_default boolean, created_at` — `deepseek_self_hosted` is a reserved value for the self-hosted DeepSeek inference adapter planned per [SOUL.md §16.2](SOUL.md#162-supported-deployment-modes); only `deepseek_cloud` is writable/usable in the MVP application layer until that adapter ships.
 
-**`usage_records`** — `id, workspace_id FK, coworker_id FK nullable, deployment_mode, model_id, input_tokens, output_tokens, cost_usd, request_id uuid, recorded_at` — feeds cost dashboards per [SOUL.md §6.11](SOUL.md#611-observability--trust); same event stream backs both billing and audit per [ARCHITECTURE.md §9](ARCHITECTURE.md#9-observability-architecture).
+**`usage_records`** — a logical rollup, not a stored table. It groups `ai.model_calls` by workspace, coworker, deployment mode, model, and day for the cost dashboard per [SOUL.md §6.11](SOUL.md#611-observability--trust). Keeping `model_calls` as the sole usage ledger prevents double writes and reconciliation drift.
 
 **`subscriptions`** — `id, workspace_id FK, plan_tier, seats int nullable, status enum(active,past_due,cancelled), renews_at`
 
@@ -136,7 +136,25 @@
 
 ### 2.8 Notifications
 
-**`notifications`** — `id, workspace_id FK, user_id FK, type enum(task_completed,approval_requested,workflow_failed,mention,billing), payload jsonb, read_at timestamptz nullable, created_at`
+**`notifications`** — `id, workspace_id FK, user_id FK, type enum(task_completed,approval_requested,workflow_failed,mention,billing), payload jsonb, read_at timestamptz nullable, email_sent_at timestamptz nullable, created_at`. `email_sent_at` is the idempotency marker for retryable Celery email delivery.
+
+### 2.9 Adaptive collaboration (Phase 4)
+
+**`capability_proposals`** records coworker, target tool/skill, rationale, status,
+reviewer, and timestamps. The row itself grants nothing; an approved transaction
+creates or enables the corresponding coworker attachment.
+
+**`memory_conflicts`** stores the two source memory UUIDs and immutable content
+snapshots, subject, resolution strategy/content, resolver, and timestamps. Source
+memories are retained for provenance.
+
+**`consensus_sessions` / `consensus_votes`** store the Agent Team, question,
+ordered options, rule, final state/result, and one attributed vote per coworker.
+Each vote may reference its durable background task and records bounded confidence.
+
+**`voice_sessions` / `voice_turns`** link a private user/coworker voice session to
+its normal conversation and store user/assistant transcripts, approval reference,
+status, language, and lifecycle timestamps. Raw microphone audio is not persisted.
 
 ---
 
@@ -146,10 +164,12 @@
 
 **`knowledge_bases`** — `id, workspace_id FK (references core.workspaces, cross-schema logical FK), scope enum(coworker,project,workspace), scope_id uuid, name, source_type enum(document,url,spreadsheet,database,conversation), created_at`
 
-**`knowledge_documents`** — `id, knowledge_base_id FK, source_uri text, mime_type, object_storage_key text (MinIO/S3 path), ingestion_status enum(pending,chunking,embedding,ready,failed), last_crawled_at timestamptz nullable, created_at`
+**`knowledge_documents`** — `id, knowledge_base_id FK, source_uri text, mime_type, object_storage_key text (MinIO/S3 path), ingestion_status enum(pending,chunking,embedding,ready,failed), ingestion_error text, last_crawled_at timestamptz nullable, created_at`. `ingestion_error` makes failed async jobs actionable in the status UI.
 
 **`knowledge_chunks`** — `id, document_id FK, chunk_index int, content text, embedding vector(1536) (pgvector column, dimension per embedding model in use), token_count int`
 - Index: `ivfflat` or `hnsw` index on `embedding` for approximate nearest-neighbor search.
+
+**`coworker_knowledge_base_attachments`** — `id, coworker_id FK (references core.coworkers), knowledge_base_id FK, created_at`; unique on `(coworker_id, knowledge_base_id)`. This is the structural attachment behind the Coworker API's attach/detach endpoints.
 
 ### 3.2 Memory
 
@@ -180,7 +200,7 @@
 
 ### 3.4 Model Router / Execution Logs
 
-**`model_calls`** — `id, request_id uuid, workspace_id, coworker_id nullable, deployment_mode, model_id, capability_requested jsonb, fallback_used boolean, input_tokens int nullable, output_tokens int nullable, cost_usd numeric nullable, latency_ms int, status enum(success,error,rate_limited), created_at` — the structured event referenced in [ARCHITECTURE.md §9](ARCHITECTURE.md#9-observability-architecture); `input_tokens`/`output_tokens`/`cost_usd` were added during Milestone 2 implementation — the original Phase 1 schema omitted them, which would have made the documented "`usage_records` is derived from this stream" claim impossible (there was nothing to derive from). `usage_records` in `core` is a rollup query over this table, not independently recorded. `coworker_id` has no FK constraint yet — the `Coworker` model doesn't exist until Milestone 3; it's a plain nullable UUID until then.
+**`model_calls`** — `id, request_id uuid, workspace_id, coworker_id nullable, deployment_mode, model_id, capability_requested jsonb, fallback_used boolean, input_tokens int nullable, output_tokens int nullable, cost_usd numeric nullable, latency_ms int, status enum(success,error,rate_limited), created_at` — the structured event referenced in [ARCHITECTURE.md §9](ARCHITECTURE.md#9-observability-architecture); `input_tokens`/`output_tokens`/`cost_usd` were added during Milestone 2 implementation — the original Phase 1 schema omitted them, which would have made the documented "`usage_records` is derived from this stream" claim impossible (there was nothing to derive from). `usage_records` in `core` is a rollup query over this table, not independently recorded. `coworker_id` became a real FK to `core.coworkers` in Milestone 4, now that the model exists (Milestone 3) — it was a plain nullable UUID before that.
 
 **`tool_call_logs`** — `id, request_id uuid, task_id nullable, coworker_id, tool_id, input jsonb, output jsonb, sandbox_container_id text nullable, status enum(success,error,denied), created_at`
 
@@ -202,7 +222,7 @@
 | `knowledge_chunks` | `embedding` (ivfflat/hnsw) | RAG retrieval |
 | `audit_log` | `(workspace_id, created_at)` | admin audit view pagination |
 | `tasks` | `(workspace_id, status)` | task queue/dashboard views |
-| `usage_records` | `(workspace_id, recorded_at)` | cost dashboard aggregation |
+| `model_calls` | `(workspace_id, created_at)` | cost dashboard aggregation |
 | `approval_requests` | `(coworker_id, status)` | approval inbox |
 
 ---
@@ -210,5 +230,5 @@
 ## 6. Data Retention & Deletion
 
 - Soft-delete (`deleted_at`) on all user-owned content tables; hard deletion is a background job run only after a workspace's configured retention window (default 30 days) to support undo, consistent with [SOUL.md §1.6](SOUL.md#16-design-principles) ("reversibility over restriction").
-- `audit_log` is append-only and exempt from soft-delete entirely — it is retained per workspace compliance settings and is the one table where deletion is a compliance/legal action, not a user action.
+- `audit_log` is append-only and exempt from soft-delete entirely. A PostgreSQL trigger rejects `UPDATE` and `DELETE`, including ORM or direct-SQL mutations; retention deletion therefore requires an explicit privileged migration that first removes the guard.
 - Memory and knowledge deletion cascades are explicit and user-visible (per [SOUL.md §12.2](SOUL.md#122-mechanics), memory is "never a black box") — deleting a Knowledge Base prompts confirmation naming every coworker currently attached to it.

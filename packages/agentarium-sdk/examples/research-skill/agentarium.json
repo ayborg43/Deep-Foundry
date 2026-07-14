@@ -1,0 +1,10 @@
+{
+  "name": "Evidence Brief",
+  "version": "1.0.0",
+  "listing_type": "skill",
+  "summary": "Turns source material into a concise, cited evidence brief.",
+  "instructions_file": "SKILL.md",
+  "declared_tools": [],
+  "visibility": "public",
+  "pricing_model": "free"
+}

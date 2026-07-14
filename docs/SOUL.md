@@ -5,7 +5,7 @@
 ### An Open Source AI Operating System for Intelligent Co-Workers
 
 **Status:** Foundational document — source of truth
-**Version:** 0.1.0 (Phase 1 — Product Architecture)
+**Version:** 0.2.0 (Phase 1 — MVP implementation)
 **Last updated:** 2026-07-12
 
 > This document is the permanent constitution of Agentarium. Every feature, architecture decision, database schema, API surface, UI pattern, and workflow must trace back to a principle or concept defined here. If a proposed change contradicts this document, the change must either be rejected or this document must be explicitly revised first — never silently overridden. All other documents (`ARCHITECTURE.md`, `ROADMAP.md`, `DATABASE.md`, `API.md`, `UI_GUIDELINES.md`, `SECURITY.md`, `CONTRIBUTING.md`) are downstream of this one.
@@ -99,9 +99,9 @@ In its mature form:
 
 - Ship a single-user, self-hostable core: create a coworker, chat with it, attach a knowledge base, run it against DeepSeek's cloud API with reliable tool-calling.
 - Ship the Model Router as the single call path to DeepSeek (chat + reasoning models, e.g. DeepSeek-V3 and DeepSeek-R1), architected so a self-hosted DeepSeek inference adapter can be added later without touching calling code (`SOUL.md` §16.2).
-- Ship a minimal Skills system (prompt + tool bundle, locally defined, no marketplace yet).
+- Ship a useful built-in Tool set (web search, file read/write, code execution); private Skill authoring remains V2 with the Developer SDK.
 - Ship a working Memory system (per-coworker + per-user, vector-search backed).
-- Ship human-approval gates for any tool call classified as "sensitive" (file writes, network calls, financial actions, sends).
+- Ship non-bypassable human-approval gates for every `dangerous` tool call, with `sensitive` actions configurable between automatic and approval-required under an organization strictness floor.
 - Validate the "coworker" mental model with real users (target: 50 self-hosted installs or design-partner teams providing structured feedback).
 
 ### 2.2 Medium-term goals (6–18 months / V2)
@@ -400,7 +400,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | Shared org coworkers | V2 |
 | Coworker export/import bundles | V3 |
 | Coworker templates marketplace | V3 |
-| Self-proposed skill gap requests | Research |
+| Self-proposed skill gap requests | V4 |
 
 ### 6.3 Chat & Interaction
 
@@ -416,7 +416,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | Voice input/output | V2 |
 | Real-time multi-human collaborative chat | V3 |
 | Video understanding in chat | V3 |
-| Real-time voice-to-voice | Research |
+| Real-time voice-to-voice | V4 |
 
 ### 6.4 Memory & Knowledge
 
@@ -432,7 +432,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | URL/web-page knowledge ingestion with re-crawl | V2 |
 | Automatic memory summarization/compaction | V3 |
 | Cross-coworker shared memory negotiation | V3 |
-| Memory conflict resolution | Research |
+| Memory conflict resolution | V4 |
 
 ### 6.5 Agent Teams & Workflows
 
@@ -448,14 +448,14 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 | Workflow template marketplace | V2 |
 | Visual workflow builder | V3 |
 | Conditional branching on coworker judgment | V3 |
-| Voting/consensus among coworkers | Research |
+| Voting/consensus among coworkers | V4 |
 
 ### 6.6 Skills, Tools & Marketplace
 
 | Feature | Priority |
 |---|---|
 | Built-in first-party skills (web search, file read/write, code execution) | MVP |
-| Local/private skill authoring | MVP |
+| Local/private skill authoring | V2 |
 | Tool permission classification (safe/sensitive/dangerous) | MVP |
 | Public marketplace browse/install | V2 |
 | Skill forking | V2 |
@@ -469,7 +469,7 @@ Legend: **MVP** = Phase 1 build · **V2** = post-MVP expansion · **V3** = enter
 
 | Feature | Priority |
 |---|---|
-| First-party starter packs (e.g., Personal Assistant, Developer) | MVP |
+| First-party starter packs (e.g., Personal Assistant, Developer) | V2 |
 | Pack install (coworkers + skills + knowledge templates + workflows in one action) | V2 |
 | Community-published packs | V2 |
 | Pack forking and customization | V2 |
@@ -613,7 +613,7 @@ A Capability Pack is the "batteries-included" install unit: a coordinated bundle
 
 | Pack | Contents highlight | Priority |
 |---|---|---|
-| Personal Assistant | Assistant coworker + calendar/email skills + task planning workflow | MVP |
+| Personal Assistant | Assistant coworker + calendar/email skills + task planning workflow | V2 |
 | Django Developer | Dev + Tester + Reviewer coworkers, terminal/file/git tools, framework-specific knowledge | V2 |
 | Python Developer | Similar to above, general-purpose Python tooling | V2 |
 | Next.js Developer | Frontend-focused dev team, browser automation for visual QA | V2 |

@@ -122,6 +122,144 @@ class GenerateStreamTests(SimpleTestCase):
         self.assertIsNone(chunks[0].finish_reason)
         self.assertEqual(chunks[2].finish_reason, "stop")
         self.assertEqual(chunks[2].usage.input_tokens, 3)
+        self.assertIsNone(chunks[2].tool_calls)
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_accumulates_fragmented_tool_call_across_chunks(self, mock_stream):
+        mock_stream.return_value = iter(
+            [
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {"name": "get_weather", "arguments": ""},
+                                    }
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [{"index": 0, "function": {"arguments": '{"city"'}}]
+                            },
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {"index": 0, "function": {"arguments": ': "Lagos"}'}}
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                {
+                    "choices": [{"delta": {}, "finish_reason": "tool_calls"}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+                },
+            ]
+        )
+        chunks = list(
+            self.adapter.generate(
+                [ChatMessage(role="user", content="weather?")],
+                [ToolDefinition(name="get_weather", description="", parameters={})],
+                ModelConfig(model_id="deepseek-chat", stream=True),
+            )
+        )
+        # The three fragment-only chunks carry nothing complete to surface —
+        # only the finish_reason chunk yields, with the fully assembled call.
+        self.assertEqual(len(chunks), 1)
+        final = chunks[0]
+        self.assertEqual(final.finish_reason, "tool_calls")
+        self.assertEqual(len(final.tool_calls), 1)
+        self.assertEqual(final.tool_calls[0].id, "call_1")
+        self.assertEqual(final.tool_calls[0].name, "get_weather")
+        self.assertEqual(final.tool_calls[0].arguments, {"city": "Lagos"})
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_accumulates_two_parallel_tool_calls_by_index(self, mock_stream):
+        mock_stream.return_value = iter(
+            [
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "function": {"name": "get_weather", "arguments": '{"a":1}'},
+                                    },
+                                    {
+                                        "index": 1,
+                                        "id": "call_2",
+                                        "function": {"name": "get_time", "arguments": '{"b":2}'},
+                                    },
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+            ]
+        )
+        chunks = list(
+            self.adapter.generate(
+                [ChatMessage(role="user", content="x")],
+                [],
+                ModelConfig(model_id="deepseek-chat", stream=True),
+            )
+        )
+        self.assertEqual(len(chunks), 1)
+        names = [tc.name for tc in chunks[0].tool_calls]
+        self.assertEqual(names, ["get_weather", "get_time"])
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_malformed_streamed_tool_arguments_do_not_crash(self, mock_stream):
+        mock_stream.return_value = iter(
+            [
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_1",
+                                        "function": {"name": "x", "arguments": "not json"},
+                                    }
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+            ]
+        )
+        chunks = list(
+            self.adapter.generate(
+                [ChatMessage(role="user", content="x")],
+                [],
+                ModelConfig(model_id="deepseek-chat", stream=True),
+            )
+        )
+        self.assertEqual(chunks[0].tool_calls[0].arguments, {})
 
 
 class ErrorHandlingTests(SimpleTestCase):

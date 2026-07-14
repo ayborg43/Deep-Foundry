@@ -133,6 +133,14 @@ async def generate_stream(payload: GenerateRequest, user: User = Depends(get_cur
                             if chunk.usage
                             else None
                         ),
+                        "tool_calls": (
+                            [
+                                {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+                                for tc in chunk.tool_calls
+                            ]
+                            if chunk.tool_calls is not None
+                            else None
+                        ),
                     },
                 )
         except (AdapterError, RateLimitedError) as exc:

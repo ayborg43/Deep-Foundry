@@ -74,6 +74,7 @@ The **Coworkers roster** is the single most important IA decision: it is the pag
 - WCAG 2.1 AA as the baseline bar for all first-party surfaces.
 - Full keyboard navigability for chat (send, regenerate, approve/deny) and the approval queue specifically — approvals are often time-sensitive and must not require a mouse.
 - Screen-reader labeling for tool-call cards and approval prompts is treated as functionally required, not cosmetic — a screen-reader user must be able to understand *what a coworker is about to do* with the same fidelity as a sighted user, given the trust stakes involved.
+- The MVP Chat implementation exposes the message stream as a polite live log, labels composer and icon-only controls, and reports tool-call expansion state with `aria-expanded`/`aria-controls`. Inline approvals are named regions with action-specific button labels. The Approval Queue uses semantic headings/articles, announces loading and errors, and makes overflowing argument payloads keyboard-focusable.
 - Color is never the sole signal for status (Idle/Working/Needs Approval/Error) — always paired with an icon and text label.
 
 ## 6. Responsive & Multi-Surface Behavior

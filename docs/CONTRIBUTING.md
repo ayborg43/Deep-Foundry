@@ -77,6 +77,7 @@ Because `SOUL.md` is binding on all future work, changing it is not a normal doc
 
 - Unit tests for all new business logic.
 - Integration tests for any new API endpoint (`API.md` contract compliance).
+- Every pull request runs migration-drift detection, the full Django suite, frontend lint/build, and both production container builds in `.github/workflows/ci.yml`.
 - For anything touching the permission/approval system: explicit test cases proving a `dangerous` tool call cannot execute without an approval record, and that org policy floors cannot be lowered by a coworker-level config — these are the platform's core trust guarantees and regressions here are treated as release-blocking.
 - For Skills/Tools submitted to the Marketplace: the SDK's local validation harness (`API.md` §13) must pass before submission; it's the first automated gate in the review pipeline (`SECURITY.md` §7).
 

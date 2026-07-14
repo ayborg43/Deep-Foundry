@@ -6,7 +6,7 @@
 import { getTokens } from "./auth";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 type ApiErrorBody = {
   error?: {
@@ -36,7 +36,7 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   const tokens = getTokens();
   const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && options.body) {
+  if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   if (tokens?.access) {
