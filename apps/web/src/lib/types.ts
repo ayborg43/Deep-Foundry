@@ -58,7 +58,9 @@ export type Tool = {
   created_at: string;
 };
 
-export type ModelId = "deepseek-4";
+export type ModelId =
+  | "deepseek-v4-flash"
+  | "deepseek-v4-pro";
 
 export type ModelBinding = {
   primary: ModelId;

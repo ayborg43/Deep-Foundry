@@ -33,12 +33,13 @@ function GoogleCallbackInner() {
 
     apiFetch<AuthSuccess>("/auth/oauth/google/callback", {
       method: "POST",
+      auth: false,
       body: JSON.stringify({ code, redirect_uri: getGoogleRedirectUri() }),
     })
       .then((result) => {
         setTokens(result.tokens);
         setWorkspaceId(result.workspace.id);
-        router.push("/");
+        router.push("/home");
       })
       .catch((err) => {
         setExchangeError(

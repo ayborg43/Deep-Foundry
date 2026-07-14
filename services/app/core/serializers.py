@@ -13,11 +13,11 @@ from core.models import (
     Workspace,
 )
 
-# The DeepSeek model IDs the Model Router actually accepts (ai/model_router/
-# adapters/deepseek_cloud.py). Single-model since DeepSeek 4 replaced the
-# earlier deepseek-chat/deepseek-reasoner pair — "deepseek-4" is a
-# placeholder id pending DeepSeek's actual published API model_id.
-VALID_DEEPSEEK_MODEL_IDS = {"deepseek-4"}
+# Keep this aligned with ai/model_router/adapters/deepseek_cloud.py.
+VALID_DEEPSEEK_MODEL_IDS = {
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+}
 
 
 def validate_model_binding_value(value: dict) -> dict:

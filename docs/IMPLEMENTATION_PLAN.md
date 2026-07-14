@@ -1,6 +1,6 @@
 ## IMPLEMENTATION_PLAN.md
 
-# Agentarium — MVP Implementation Plan
+# Deep-Foundry — MVP Implementation Plan
 
 > Downstream of every other document. Scope is **Phase 1 / MVP** as defined in `ROADMAP.md`. Do not begin implementation until this plan is reviewed and approved — per the original mandate, architecture and planning precede code. Milestones are dependency-ordered; epics within a milestone can generally proceed in parallel once that milestone's foundation lands.
 
@@ -56,7 +56,7 @@ Every epic references the doc sections it must stay consistent with. No task her
 ### Epic 1.1 — Authentication
 *Refs: `SOUL.md` §5.1, §6.1; `API.md` §2; `SECURITY.md` §2*
 
-- **Story:** As a new user, I want to sign up with email/password or Google OAuth, so that I can start using Agentarium without friction.
+- **Story:** As a new user, I want to sign up with email/password or Google OAuth, so that I can start using Deep-Foundry without friction.
   - Task: Registration/login/logout/refresh endpoints (`API.md` §2), Argon2id password hashing (`SECURITY.md` §2).
   - Task: Google OAuth flow (callback handling, identity linking).
   - Task: Session/JWT issuance with refresh-token rotation.

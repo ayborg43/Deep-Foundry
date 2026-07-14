@@ -1,4 +1,4 @@
-# Agentarium SDK
+# Deep-Foundry SDK
 
 ```powershell
 pip install -e packages/agentarium-sdk

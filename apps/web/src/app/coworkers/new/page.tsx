@@ -35,7 +35,8 @@ export default function NewCoworkerPage() {
 
   const [name, setName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
-  const [primaryModel, setPrimaryModel] = useState<ModelId>("deepseek-4");
+  const [primaryModel, setPrimaryModel] =
+    useState<ModelId>("deepseek-v4-flash");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -154,6 +155,10 @@ export default function NewCoworkerPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {MODEL_OPTIONS.find((option) => option.id === primaryModel)
+                    ?.description ?? "Choose the model this coworker will use."}
+                </p>
               </div>
             </CardContent>
             <CardFooter>

@@ -22,7 +22,7 @@ def _raw_response(content="Hello!", tool_calls=None, finish_reason="stop"):
         message["tool_calls"] = tool_calls
     return {
         "id": "chatcmpl-123",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "choices": [{"message": message, "finish_reason": finish_reason}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     }
@@ -36,7 +36,7 @@ class GenerateSyncTests(SimpleTestCase):
     def test_normalizes_simple_response(self, mock_post):
         mock_post.return_value = _raw_response(content="Hi there")
         response = self.adapter.generate(
-            [ChatMessage(role="user", content="hi")], [], ModelConfig(model_id="deepseek-chat")
+            [ChatMessage(role="user", content="hi")], [], ModelConfig(model_id="deepseek-v4-flash")
         )
         self.assertEqual(response.content, "Hi there")
         self.assertEqual(response.usage.input_tokens, 10)
@@ -59,7 +59,7 @@ class GenerateSyncTests(SimpleTestCase):
         response = self.adapter.generate(
             [ChatMessage(role="user", content="weather?")],
             [ToolDefinition(name="get_weather", description="", parameters={})],
-            ModelConfig(model_id="deepseek-chat"),
+            ModelConfig(model_id="deepseek-v4-flash"),
         )
         self.assertEqual(len(response.tool_calls), 1)
         self.assertEqual(response.tool_calls[0].name, "get_weather")
@@ -73,7 +73,7 @@ class GenerateSyncTests(SimpleTestCase):
             tool_calls=[{"id": "call_1", "function": {"name": "x", "arguments": "not json"}}],
         )
         response = self.adapter.generate(
-            [ChatMessage(role="user", content="x")], [], ModelConfig(model_id="deepseek-chat")
+            [ChatMessage(role="user", content="x")], [], ModelConfig(model_id="deepseek-v4-flash")
         )
         self.assertEqual(response.tool_calls[0].arguments, {})
 
@@ -83,11 +83,11 @@ class GenerateSyncTests(SimpleTestCase):
         self.adapter.generate(
             [ChatMessage(role="system", content="be nice"), ChatMessage(role="user", content="hi")],
             [ToolDefinition(name="t", description="d", parameters={"type": "object"})],
-            ModelConfig(model_id="deepseek-reasoner", temperature=0.5, max_tokens=100),
+            ModelConfig(model_id="deepseek-v4-pro", temperature=0.5, max_tokens=100),
         )
         sent_path, sent_payload = mock_post.call_args[0]
         self.assertEqual(sent_path, "/chat/completions")
-        self.assertEqual(sent_payload["model"], "deepseek-reasoner")
+        self.assertEqual(sent_payload["model"], "deepseek-v4-pro")
         self.assertEqual(sent_payload["temperature"], 0.5)
         self.assertEqual(sent_payload["max_tokens"], 100)
         self.assertEqual(sent_payload["stream"], False)
@@ -115,7 +115,7 @@ class GenerateStreamTests(SimpleTestCase):
             self.adapter.generate(
                 [ChatMessage(role="user", content="hi")],
                 [],
-                ModelConfig(model_id="deepseek-chat", stream=True),
+                ModelConfig(model_id="deepseek-v4-flash", stream=True),
             )
         )
         self.assertEqual([c.delta for c in chunks], ["Hel", "lo", ""])
@@ -177,7 +177,7 @@ class GenerateStreamTests(SimpleTestCase):
             self.adapter.generate(
                 [ChatMessage(role="user", content="weather?")],
                 [ToolDefinition(name="get_weather", description="", parameters={})],
-                ModelConfig(model_id="deepseek-chat", stream=True),
+                ModelConfig(model_id="deepseek-v4-flash", stream=True),
             )
         )
         # The three fragment-only chunks carry nothing complete to surface —
@@ -222,7 +222,7 @@ class GenerateStreamTests(SimpleTestCase):
             self.adapter.generate(
                 [ChatMessage(role="user", content="x")],
                 [],
-                ModelConfig(model_id="deepseek-chat", stream=True),
+                ModelConfig(model_id="deepseek-v4-flash", stream=True),
             )
         )
         self.assertEqual(len(chunks), 1)
@@ -256,7 +256,7 @@ class GenerateStreamTests(SimpleTestCase):
             self.adapter.generate(
                 [ChatMessage(role="user", content="x")],
                 [],
-                ModelConfig(model_id="deepseek-chat", stream=True),
+                ModelConfig(model_id="deepseek-v4-flash", stream=True),
             )
         )
         self.assertEqual(chunks[0].tool_calls[0].arguments, {})
@@ -271,7 +271,7 @@ class ErrorHandlingTests(SimpleTestCase):
         mock_post.side_effect = AdapterError("boom")
         with self.assertRaises(AdapterError):
             self.adapter.generate(
-                [ChatMessage(role="user", content="x")], [], ModelConfig(model_id="deepseek-chat")
+                [ChatMessage(role="user", content="x")], [], ModelConfig(model_id="deepseek-v4-flash")
             )
 
     @patch.object(DeepSeekCloudAdapter, "_post")
@@ -279,7 +279,7 @@ class ErrorHandlingTests(SimpleTestCase):
         mock_post.side_effect = RateLimitedError("slow down")
         with self.assertRaises(RateLimitedError):
             self.adapter.generate(
-                [ChatMessage(role="user", content="x")], [], ModelConfig(model_id="deepseek-chat")
+                [ChatMessage(role="user", content="x")], [], ModelConfig(model_id="deepseek-v4-flash")
             )
 
 
@@ -287,14 +287,23 @@ class CapabilitiesAndCostTests(SimpleTestCase):
     def setUp(self):
         self.adapter = DeepSeekCloudAdapter(api_key="test-key")
 
-    def test_chat_model_capabilities(self):
-        caps = self.adapter.capabilities("deepseek-chat")
+    def test_flash_model_capabilities(self):
+        caps = self.adapter.capabilities("deepseek-v4-flash")
         self.assertTrue(caps.tool_calling)
-        self.assertFalse(caps.reasoning_mode)
-
-    def test_reasoner_model_capabilities(self):
-        caps = self.adapter.capabilities("deepseek-reasoner")
         self.assertTrue(caps.reasoning_mode)
+
+    def test_pro_model_capabilities(self):
+        caps = self.adapter.capabilities("deepseek-v4-pro")
+        self.assertTrue(caps.tool_calling)
+        self.assertTrue(caps.reasoning_mode)
+
+    def test_v4_models_are_available_for_selection(self):
+        for model_id in ("deepseek-v4-flash", "deepseek-v4-pro"):
+            with self.subTest(model_id=model_id):
+                caps = self.adapter.capabilities(model_id)
+                self.assertTrue(caps.tool_calling)
+                self.assertTrue(caps.reasoning_mode)
+                self.assertTrue(caps.streaming)
 
     def test_unknown_model_raises(self):
         with self.assertRaises(AdapterError):
@@ -302,8 +311,8 @@ class CapabilitiesAndCostTests(SimpleTestCase):
 
     def test_estimate_cost_matches_hand_calculation(self):
         usage = Usage(input_tokens=1_000_000, output_tokens=1_000_000)
-        cost = self.adapter.estimate_cost(usage, "deepseek-chat")
-        self.assertEqual(cost, Decimal("0.27") + Decimal("1.10"))
+        cost = self.adapter.estimate_cost(usage, "deepseek-v4-flash")
+        self.assertEqual(cost, Decimal("0.14") + Decimal("0.28"))
 
     def test_estimate_cost_zero_for_unknown_model(self):
         usage = Usage(input_tokens=100, output_tokens=100)

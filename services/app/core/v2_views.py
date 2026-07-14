@@ -668,7 +668,11 @@ class WebhookIngressView(APIView):
     def post(self, request, integration, workspace_token):
         row = get_object_or_404(Integration, kind=integration, workspace_token=workspace_token, enabled=True)
         secret = decrypt_from_bytes(bytes(row.encrypted_secret)) if row.encrypted_secret else ""
-        signature = request.headers.get("X-Agentarium-Signature") or request.headers.get("X-Hub-Signature-256", "")
+        signature = (
+            request.headers.get("X-Deep-Foundry-Signature")
+            or request.headers.get("X-Agentarium-Signature")
+            or request.headers.get("X-Hub-Signature-256", "")
+        )
         expected = "sha256=" + hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
             return Response({"error": "invalid_signature"}, status=401)

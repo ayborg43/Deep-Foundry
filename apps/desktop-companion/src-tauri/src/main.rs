@@ -65,5 +65,5 @@ fn watch_folder(path: String, app: tauri::AppHandle, state: tauri::State<LocalGr
 }
 
 fn main() {
-    tauri::Builder::default().manage(LocalGrants::default()).invoke_handler(tauri::generate_handler![grant_folder, read_file, write_file, propose_terminal, execute_terminal, clipboard_write, open_browser, watch_folder]).run(tauri::generate_context!()).expect("failed to run Agentarium Companion");
+    tauri::Builder::default().manage(LocalGrants::default()).invoke_handler(tauri::generate_handler![grant_folder, read_file, write_file, propose_terminal, execute_terminal, clipboard_write, open_browser, watch_folder]).run(tauri::generate_context!()).expect("failed to run Deep-Foundry Companion");
 }

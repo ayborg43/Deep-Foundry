@@ -33,20 +33,19 @@ from ai.model_router.types import (
 
 API_BASE = "https://api.deepseek.com/v1"
 
-# DeepSeek 4 — the single MVP-relevant model, replacing the earlier
-# deepseek-chat/deepseek-reasoner pair. PLACEHOLDER values: the real
-# model_id string DeepSeek's API expects, its context window, and its
-# per-million-token pricing haven't been confirmed against DeepSeek's
-# published docs yet — re-check all three before relying on this for real
-# capability negotiation or billing.
+# Current DeepSeek API models.
 _MODEL_CAPABILITIES = {
-    "deepseek-4": Capabilities(
-        tool_calling=True, max_context=128_000, reasoning_mode=True, streaming=True
+    "deepseek-v4-flash": Capabilities(
+        tool_calling=True, max_context=1_000_000, reasoning_mode=True, streaming=True
+    ),
+    "deepseek-v4-pro": Capabilities(
+        tool_calling=True, max_context=1_000_000, reasoning_mode=True, streaming=True
     ),
 }
 
 _PRICE_PER_MILLION_TOKENS_USD = {
-    "deepseek-4": {"input": Decimal("0.55"), "output": Decimal("2.19")},
+    "deepseek-v4-flash": {"input": Decimal("0.14"), "output": Decimal("0.28")},
+    "deepseek-v4-pro": {"input": Decimal("0.435"), "output": Decimal("0.87")},
 }
 
 

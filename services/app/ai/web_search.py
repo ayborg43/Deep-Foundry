@@ -74,7 +74,7 @@ def search_web(query: str, *, max_results: int | None = None) -> list[dict[str, 
         data=urlencode({"q": query}).encode("utf-8"),
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "Agentarium/1.0 (self-hosted web search)",
+            "User-Agent": "Deep-Foundry/1.0 (self-hosted web search)",
         },
         method="POST",
     )

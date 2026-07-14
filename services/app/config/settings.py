@@ -1,5 +1,5 @@
 """
-Django settings for the Agentarium modular monolith (Core modules).
+Django settings for the Deep-Foundry modular monolith (Core modules).
 
 Per ARCHITECTURE.md ADR-006: this is the same settings module used whether the
 process is running as the ASGI app (config.asgi:application) or as the Celery
@@ -157,7 +157,7 @@ FIELD_ENCRYPTION_KEY = os.environ.get(
     "FIELD_ENCRYPTION_KEY", "cejGCUCoSNmRYVMLQQQX9KGwbOqCiauvwWsHIWy-RPY="
 )
 
-MFA_ISSUER_NAME = "Agentarium"
+MFA_ISSUER_NAME = "Deep-Foundry"
 
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
@@ -251,7 +251,7 @@ EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "25"))
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "false").lower() == "true"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Agentarium <noreply@localhost>")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Deep-Foundry <noreply@localhost>")
 WEB_APP_URL = os.environ.get("WEB_APP_URL", "http://localhost:3000")
 INTERNAL_API_TOKEN = os.environ.get(
     "INTERNAL_API_TOKEN", "insecure-dev-internal-token-change-in-production"

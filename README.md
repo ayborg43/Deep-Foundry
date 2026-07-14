@@ -1,6 +1,6 @@
-# Agentarium
+# Deep-Foundry
 
-Agentarium is a self-hostable AI coworker platform. Phase 2 includes organization
+Deep-Foundry is a self-hostable AI coworker platform. Phase 2 includes organization
 RBAC and policy floors, shared coworkers, multi-agent teams, durable scheduled and
 event-driven workflows, a reviewed Marketplace with first-party capability packs,
 a publishing SDK, integrations, browser voice controls, a permission-gated desktop

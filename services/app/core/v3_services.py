@@ -147,7 +147,7 @@ def export_coworker_bundle(coworker: Coworker, user: User) -> Artifact:
                 "definition": json.loads(canonical.replace(str(coworker.id), "$coworker")),
             })
     content = {
-        "schema_version": "1", "kind": "agentarium_coworker_bundle",
+        "schema_version": "1", "kind": "deep_foundry_coworker_bundle",
         "coworker": {
             "name": coworker.name, "avatar_url": coworker.avatar_url,
             "role_description": coworker.current_version.role_description,
@@ -171,14 +171,18 @@ def export_coworker_bundle(coworker: Coworker, user: User) -> Artifact:
 
 
 def import_coworker_bundle(workspace: Workspace, user: User, content: dict[str, Any]) -> Coworker:
-    if content.get("kind") != "agentarium_coworker_bundle" or content.get("schema_version") != "1":
+    if content.get("kind") not in {
+        "deep_foundry_coworker_bundle",
+        "agentarium_coworker_bundle",
+    } or content.get("schema_version") != "1":
         raise ValidationError("Unsupported coworker bundle format.")
     data = content.get("coworker") or {}
     profile, _ = PermissionProfile.objects.get_or_create(workspace=workspace, name="Default")
     coworker = create_coworker(
         workspace=workspace, owner=user, created_by=user, name=data.get("name", "Imported coworker"),
         avatar_url=data.get("avatar_url"), role_description=data.get("role_description", ""),
-        model_binding=data.get("model_binding", {"primary": "deepseek-4"}), permission_profile=profile,
+        model_binding=data.get("model_binding", {"primary": "deepseek-v4-flash"}),
+        permission_profile=profile,
     )
     for tool in Tool.objects.filter(name__in=data.get("tools", [])):
         CoworkerToolAttachment.objects.get_or_create(coworker=coworker, tool=tool)

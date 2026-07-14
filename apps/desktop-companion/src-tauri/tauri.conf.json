@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Agentarium Companion",
+  "productName": "Deep-Foundry Companion",
   "version": "0.1.0",
   "identifier": "io.agentarium.companion",
   "build": { "beforeDevCommand": "npm run vite -- --host 127.0.0.1", "beforeBuildCommand": "npm run vite build", "devUrl": "http://127.0.0.1:5173", "frontendDist": "../dist" },
-  "app": { "windows": [{ "title": "Agentarium Companion", "width": 760, "height": 640 }], "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost" } },
+  "app": { "windows": [{ "title": "Deep-Foundry Companion", "width": 760, "height": 640 }], "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost" } },
   "bundle": { "active": true, "targets": "all" }
 }

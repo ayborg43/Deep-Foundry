@@ -308,7 +308,9 @@ def install_listing(
                     owner=user,
                     name=template["name"],
                     role_description=template["role_description"],
-                    model_binding=template.get("model_binding", {"primary": "deepseek-4", "fallback": []}),
+                    model_binding=template.get(
+                        "model_binding", {"primary": "deepseek-v4-flash", "fallback": []}
+                    ),
                     created_by=user,
                     permission_profile=profile,
                 )

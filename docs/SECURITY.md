@@ -1,12 +1,12 @@
 ## SECURITY.md
 
-# Agentarium — Security Architecture
+# Deep-Foundry — Security Architecture
 
 > Expands `SOUL.md` [Section 15](SOUL.md#15-security) and `ARCHITECTURE.md` [Section 7](ARCHITECTURE.md#7-security-boundary-placement). This document is the operative security policy: every threat below maps to a specific control, and every control maps back to a principle in `SOUL.md` §3.
 
 ## 1. Threat Model
 
-Agentarium's core risk is unique among SaaS products: it grants autonomous entities (coworkers) the ability to take real-world action — send communications, execute code, spend money, modify files. The threat model is therefore organized around **who or what could cause unwanted action**, not just around traditional data-breach vectors.
+Deep-Foundry's core risk is unique among SaaS products: it grants autonomous entities (coworkers) the ability to take real-world action — send communications, execute code, spend money, modify files. The threat model is therefore organized around **who or what could cause unwanted action**, not just around traditional data-breach vectors.
 
 | Actor | Risk | Primary control |
 |---|---|---|
@@ -32,7 +32,7 @@ Agentarium's core risk is unique among SaaS products: it grants autonomous entit
 
 ## 4. The Permission & Approval System
 
-This is Agentarium's central trust mechanism and deserves restating precisely from `SOUL.md` §15.2:
+This is Deep-Foundry's central trust mechanism and deserves restating precisely from `SOUL.md` §15.2:
 
 - **Risk classification is a property of the Tool, not the coworker.** `safe` / `sensitive` / `dangerous`, assigned at Tool registration (built-in tools classified by the core team; marketplace/skill-bundled tools classified during the review pipeline in §7).
 - **`dangerous` tools always require human approval.** There is no code path, coworker setting, org override, or workflow flag that can set a `dangerous` tool to auto-execute. This is enforced in the Security & Permissions library itself (a hard-coded invariant, not a configurable default) — the only thing configurable is *who* can grant the approval and whether a narrowly-scoped recurring pre-approval exists for one specific action pattern (e.g., "always allow sending to this exact email template to this exact recipient list").
@@ -60,7 +60,7 @@ new child container and is force-removed after completion or timeout.
 
 - Provider API keys and integration OAuth tokens are envelope-encrypted at rest (`DATABASE.md` §2.7 `provider_credentials.encrypted_key`), decrypted only transiently by the AI modules at call time — whether invoked in-process during a live chat request or by a Celery worker — never logged, never returned to any client in plaintext after initial entry.
 - MVP: application-layer envelope encryption keyed by a platform master key (itself stored in a managed KMS for cloud, or an operator-supplied key file for self-hosted).
-- V2+ upgrade path: dedicated secrets manager (e.g., Vault) for cloud/enterprise deployments requiring key rotation policies and finer-grained access auditing than envelope encryption alone provides — self-hosted deployments retain the simpler file-key model as a supported, documented option so operating Agentarium doesn't require operating Vault.
+- V2+ upgrade path: dedicated secrets manager (e.g., Vault) for cloud/enterprise deployments requiring key rotation policies and finer-grained access auditing than envelope encryption alone provides — self-hosted deployments retain the simpler file-key model as a supported, documented option so operating Deep-Foundry doesn't require operating Vault.
 - Self-hosted operators are documented and defaulted toward: never committing `.env`/credential files to version control, rotating the master key on a defined schedule, restricting database backup access (backups contain encrypted secrets — encrypted, but still a target).
 
 ## 7. Marketplace Security Review Pipeline
@@ -119,7 +119,7 @@ Every control above exists to serve one of these; when a new feature raises a se
 - OIDC uses authorization-code exchange. The SAML integration trusts only a
   configured identity gateway that has already validated XML signatures; the
   gateway assertion is independently protected by signed state and HMAC, and
-  Agentarium validates issuer, audience, domain, and freshness.
+  Deep-Foundry validates issuer, audience, domain, and freshness.
 - Organization rules are evaluated in priority order and enforced at all three
   tool execution entrypoints: interactive chat, background tasks, and workflows.
 - Compliance and portable-coworker exports exclude encrypted credentials,

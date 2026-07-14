@@ -22,8 +22,8 @@ class Phase2TestBase(TestCase):
         self.workspace = Workspace.objects.create(name="V2 Org", type=Workspace.WorkspaceType.ORGANIZATION, owner=self.user)
         WorkspaceMember.objects.create(workspace=self.workspace, user=self.user, role=WorkspaceMember.Role.OWNER)
         profile = PermissionProfile.objects.create(workspace=self.workspace, name="Default")
-        self.manager = create_coworker(workspace=self.workspace, owner=self.user, created_by=self.user, name="Manager", role_description="Manage work.", model_binding={"primary": "deepseek-chat"}, permission_profile=profile)
-        self.worker = create_coworker(workspace=self.workspace, owner=self.user, created_by=self.user, name="Worker", role_description="Do work.", model_binding={"primary": "deepseek-chat"}, permission_profile=profile)
+        self.manager = create_coworker(workspace=self.workspace, owner=self.user, created_by=self.user, name="Manager", role_description="Manage work.", model_binding={"primary": "deepseek-v4-flash"}, permission_profile=profile)
+        self.worker = create_coworker(workspace=self.workspace, owner=self.user, created_by=self.user, name="Worker", role_description="Do work.", model_binding={"primary": "deepseek-v4-flash"}, permission_profile=profile)
         self.client = APIClient(); self.client.force_authenticate(self.user)
 
 

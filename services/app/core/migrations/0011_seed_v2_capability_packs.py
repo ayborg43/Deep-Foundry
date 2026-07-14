@@ -61,10 +61,10 @@ def seed_packs(apps, schema_editor):
     Version = apps.get_model("core", "MarketplaceListingVersion")
     user, _ = User.objects.get_or_create(
         email="marketplace@agentarium.local",
-        defaults={"display_name": "Agentarium", "password": "!", "is_active": False},
+        defaults={"display_name": "Deep-Foundry", "password": "!", "is_active": False},
     )
     workspace, _ = Workspace.objects.get_or_create(
-        name="Agentarium First Party",
+        name="Deep-Foundry First Party",
         owner=user,
         defaults={"type": "organization", "plan_tier": "self_hosted_free"},
     )

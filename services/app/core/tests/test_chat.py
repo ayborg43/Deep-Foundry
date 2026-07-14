@@ -101,7 +101,7 @@ class ChatTestBase(APITestCase):
             created_by=self.owner,
             name="Aria",
             role_description="A helpful test coworker.",
-            model_binding={"primary": "deepseek-chat"},
+            model_binding={"primary": "deepseek-v4-flash"},
             permission_profile=self.permission_profile,
         )
         from core.models import CoworkerToolAttachment

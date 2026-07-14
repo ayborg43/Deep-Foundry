@@ -30,7 +30,7 @@ class ObservabilityApiTests(TestCase):
             created_by=self.owner,
             name="Ada",
             role_description="Analyze usage.",
-            model_binding={"primary": "deepseek-chat"},
+            model_binding={"primary": "deepseek-v4-flash"},
         )
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
@@ -69,7 +69,7 @@ class ObservabilityApiTests(TestCase):
 
     def test_usage_rollup_groups_calls_by_coworker_and_provider(self):
         for model_id, mode, cost, input_tokens, output_tokens in (
-            ("deepseek-chat", "deepseek_cloud", "0.010000", 100, 20),
+            ("deepseek-v4-flash", "deepseek_cloud", "0.010000", 100, 20),
             ("local-qwen", "local", "0.020000", 50, 10),
         ):
             ModelCall.objects.create(

@@ -1,6 +1,6 @@
 ## DATABASE.md
 
-# Agentarium — Database Design
+# Deep-Foundry — Database Design
 
 > Downstream of `SOUL.md` ([Section 4, Core Concepts](SOUL.md#4-core-concepts)) and `ARCHITECTURE.md` ([Section 4, Data Layer](ARCHITECTURE.md#4-data-layer)). Schema names below are illustrative (`snake_case` table names, `id` as UUID primary key convention) — exact migration syntax belongs in the codebase, not this document. This document is the contract that migrations must satisfy, not a replacement for them.
 

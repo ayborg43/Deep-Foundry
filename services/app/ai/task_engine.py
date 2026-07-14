@@ -247,7 +247,7 @@ def execute_background_task(task_id: UUID | str) -> None:
             response = router.generate(
                 messages,
                 definitions,
-                ModelConfig(model_id=binding.get("primary", "deepseek-4")),
+                ModelConfig(model_id=binding.get("primary", "deepseek-v4-flash")),
                 fallback_model_id=(binding.get("fallback") or [None])[0],
             )
             messages.append(

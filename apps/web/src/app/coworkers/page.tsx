@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { MODEL_SHORT_LABELS } from "@/lib/coworkers";
@@ -57,23 +58,22 @@ export default function CoworkersRosterPage() {
   }, []);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-12">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Coworkers</h1>
-          <p className="text-sm text-muted-foreground">
-            Persistent AI coworkers configured for this workspace.
-          </p>
-        </div>
-        {coworkers.length > 0 ? (
-          <Button asChild>
-            <Link href="/coworkers/new">
-              <PlusIcon data-icon="inline-start" />
-              New coworker
-            </Link>
-          </Button>
-        ) : null}
-      </div>
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
+      <PageHeader
+        eyebrow="Workspace"
+        title="Coworkers"
+        description="Persistent AI coworkers with their own role, model, memory, and tools — always on, always yours."
+        actions={
+          coworkers.length > 0 ? (
+            <Button asChild>
+              <Link href="/coworkers/new">
+                <PlusIcon data-icon="inline-start" />
+                New coworker
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {!workspaceId && !isLoading ? (
         <Alert variant="destructive">
@@ -94,10 +94,12 @@ export default function CoworkersRosterPage() {
         <p className="text-sm text-muted-foreground">Loading...</p>
       ) : coworkers.length === 0 && workspaceId ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <BotIcon className="size-10 text-muted-foreground" />
+          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+              <BotIcon className="size-7" />
+            </div>
             <div>
-              <p className="font-medium">No coworkers yet</p>
+              <p className="font-heading text-lg font-semibold">No coworkers yet</p>
               <p className="text-sm text-muted-foreground">
                 Create your first coworker to give it a role, a model, and
                 tools it can use.
@@ -114,8 +116,8 @@ export default function CoworkersRosterPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {coworkers.map((coworker) => (
-            <Link key={coworker.id} href={`/coworkers/${coworker.id}`}>
-              <Card className="h-full transition-colors hover:bg-muted/50">
+            <Link key={coworker.id} href={`/coworkers/${coworker.id}`} className="group/card">
+              <Card className="h-full transition-all group-hover/card:border-primary/40 group-hover/card:shadow-sm">
                 <CardHeader className="flex-row items-center gap-3">
                   {coworker.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -125,8 +127,8 @@ export default function CoworkersRosterPage() {
                       className="size-10 shrink-0 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
-                      <BotIcon className="size-5 text-muted-foreground" />
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
+                      <BotIcon className="size-5" />
                     </div>
                   )}
                   <div className="flex min-w-0 flex-col">

@@ -21,10 +21,10 @@ class ToolExecutorTests(SimpleTestCase):
     @patch("ai.tool_executor.search_web")
     def test_web_search_returns_provider_results(self, search_web):
         search_web.return_value = [
-            {"title": "Agentarium", "url": "https://example.com", "snippet": "AI coworkers"}
+            {"title": "Deep-Foundry", "url": "https://example.com", "snippet": "AI coworkers"}
         ]
         result = execute_tool("web_search", {"query": "agentarium"}, workspace_id=self.workspace_id)
-        self.assertEqual(result.output["results"][0]["title"], "Agentarium")
+        self.assertEqual(result.output["results"][0]["title"], "Deep-Foundry")
         self.assertIsNone(result.error)
         search_web.assert_called_once_with("agentarium", max_results=None)
 

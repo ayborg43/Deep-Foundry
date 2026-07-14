@@ -47,7 +47,7 @@ class MemoryAndIngestionTests(TestCase):
         )
         self.assertEqual(results[0].content, "Preferred weekly report format is PDF")
 
-    @patch("ai.knowledge.load_upload", return_value=b"Agentarium knowledge answer is cobalt blue.")
+    @patch("ai.knowledge.load_upload", return_value=b"Deep-Foundry knowledge answer is cobalt blue.")
     def test_document_ingestion_chunks_embeds_and_marks_ready(self, _load_upload):
         kb = KnowledgeBase.objects.create(
             workspace=self.workspace, scope=KnowledgeBase.Scope.WORKSPACE,

@@ -200,7 +200,8 @@ def _continue_turn(
         messages = _build_history(conversation, coworker_config, exclude_message_ids)
         messages[1:1] = context_messages
         model_config = ModelConfig(
-            model_id=coworker_config.model_binding.get("primary", "deepseek-4"), stream=True
+            model_id=coworker_config.model_binding.get("primary", "deepseek-v4-flash"),
+            stream=True,
         )
 
         content_parts: list[str] = []

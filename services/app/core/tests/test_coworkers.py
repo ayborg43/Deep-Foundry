@@ -45,7 +45,7 @@ class CoworkerTestBase(APITestCase):
         body = {
             "name": "Aria",
             "role_description": "Handles customer support triage.",
-            "model_binding": {"primary": "deepseek-chat", "fallback": ["deepseek-reasoner"]},
+            "model_binding": {"primary": "deepseek-v4-flash", "fallback": ["deepseek-v4-pro"]},
         }
         body.update(overrides)
         response = self.client.post(self._list_create_url(), body, format="json")
@@ -79,7 +79,7 @@ class CoworkerCreateTests(CoworkerTestBase):
         data = self._create_coworker()
         self.assertEqual(data["name"], "Aria")
         self.assertEqual(data["role_description"], "Handles customer support triage.")
-        self.assertEqual(data["model_binding"]["primary"], "deepseek-chat")
+        self.assertEqual(data["model_binding"]["primary"], "deepseek-v4-flash")
         self.assertEqual(data["current_version"], 1)
         self.assertEqual(data["status"], "active")
         self.assertEqual(data["attached_tools"], [])
@@ -93,6 +93,14 @@ class CoworkerCreateTests(CoworkerTestBase):
         self.assertEqual(coworker.owner_id, self.owner.id)
         self.assertEqual(CoworkerVersion.objects.filter(coworker=coworker).count(), 1)
 
+    def test_create_accepts_each_selectable_v4_model(self):
+        for model_id in ("deepseek-v4-flash", "deepseek-v4-pro"):
+            with self.subTest(model_id=model_id):
+                data = self._create_coworker(
+                    name=model_id, model_binding={"primary": model_id}
+                )
+                self.assertEqual(data["model_binding"]["primary"], model_id)
+
     def test_create_rejects_unknown_model(self):
         response = self.client.post(
             self._list_create_url(),
@@ -105,13 +113,27 @@ class CoworkerCreateTests(CoworkerTestBase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_create_rejects_deprecated_models(self):
+        for model_id in ("deepseek-chat", "deepseek-reasoner", "deepseek-4"):
+            with self.subTest(model_id=model_id):
+                response = self.client.post(
+                    self._list_create_url(),
+                    {
+                        "name": "Deprecated",
+                        "role_description": "x",
+                        "model_binding": {"primary": model_id},
+                    },
+                    format="json",
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_create_rejects_unknown_fallback_model(self):
         response = self.client.post(
             self._list_create_url(),
             {
                 "name": "Bad",
                 "role_description": "x",
-                "model_binding": {"primary": "deepseek-chat", "fallback": ["claude"]},
+                "model_binding": {"primary": "deepseek-v4-flash", "fallback": ["claude"]},
             },
             format="json",
         )
@@ -121,7 +143,7 @@ class CoworkerCreateTests(CoworkerTestBase):
         self._auth_as(self.stranger)
         response = self.client.post(
             self._list_create_url(),
-            {"name": "x", "role_description": "x", "model_binding": {"primary": "deepseek-chat"}},
+            {"name": "x", "role_description": "x", "model_binding": {"primary": "deepseek-v4-flash"}},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -191,11 +213,11 @@ class CoworkerDetailTests(CoworkerTestBase):
         created = self._create_coworker()
         response = self.client.patch(
             reverse("coworker-detail", kwargs={"coworker_id": created["id"]}),
-            {"model_binding": {"primary": "deepseek-reasoner"}},
+            {"model_binding": {"primary": "deepseek-v4-pro"}},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["model_binding"]["primary"], "deepseek-reasoner")
+        self.assertEqual(response.data["model_binding"]["primary"], "deepseek-v4-pro")
         self.assertEqual(response.data["current_version"], 2)
 
     def test_patch_empty_body_rejected(self):

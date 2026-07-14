@@ -91,7 +91,7 @@ class ChatOrchestratorTestBase(TestCase):
             created_by=self.user,
             name="Aria",
             role_description="A helpful test coworker.",
-            model_binding={"primary": "deepseek-chat"},
+            model_binding={"primary": "deepseek-v4-flash"},
             permission_profile=self.permission_profile,
         )
         CoworkerToolAttachment.objects.create(
@@ -380,7 +380,7 @@ class ConcurrentToolExecutionRaceTests(TransactionTestCase):
         )
         self.coworker = create_coworker(
             workspace=self.workspace, owner=self.user, created_by=self.user, name="Racer",
-            role_description="test", model_binding={"primary": "deepseek-chat"},
+            role_description="test", model_binding={"primary": "deepseek-v4-flash"},
             permission_profile=self.permission_profile,
         )
         self.tool = Tool.objects.get(name="execute_code")

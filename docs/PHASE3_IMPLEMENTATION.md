@@ -9,7 +9,7 @@ self-hosted product from the hosted product.
   roles grant narrowly scoped capabilities alongside owner/admin.
 - OIDC authorization-code SSO and signed SAML-broker assertions support JIT
   membership. The SAML broker contract exists because XML signature validation
-  belongs at the identity gateway; Agentarium still validates signed state,
+  belongs at the identity gateway; Deep-Foundry still validates signed state,
   issuer, audience, domain, and broker HMAC before provisioning.
 - SCIM 2.0 Users endpoints use independently revocable `scm_` bearer tokens.
 - Data-region selection, retention, legal hold, support tier, response targets,

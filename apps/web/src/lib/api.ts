@@ -1,4 +1,4 @@
-// Thin fetch helper for the Agentarium API. Attaches the bearer access
+// Thin fetch helper for the Deep-Foundry API. Attaches the bearer access
 // token (if any) and normalizes the { error: { code, message, details } }
 // envelope into a thrown ApiRequestError. No retry/refresh interceptor
 // chain by design — out of scope for Milestone 1.
@@ -30,23 +30,29 @@ export class ApiRequestError extends Error {
   }
 }
 
+// `auth: false` skips the bearer header for public endpoints (login,
+// register, refresh). A stale token in localStorage would otherwise be
+// sent and rejected by JWTAuthentication before the AllowAny view runs.
+type ApiFetchOptions = RequestInit & { auth?: boolean };
+
 export async function apiFetch<T = unknown>(
   path: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ): Promise<T> {
+  const { auth = true, ...init } = options;
   const tokens = getTokens();
-  const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
+  const headers = new Headers(init.headers);
+  if (!headers.has("Content-Type") && init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  if (tokens?.access) {
+  if (auth && tokens?.access) {
     headers.set("Authorization", `Bearer ${tokens.access}`);
   }
 
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}/api/v1${path}`, {
-      ...options,
+      ...init,
       headers,
     });
   } catch {

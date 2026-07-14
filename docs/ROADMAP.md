@@ -1,6 +1,6 @@
 ## ROADMAP.md
 
-# Agentarium — Roadmap
+# Deep-Foundry — Roadmap
 
 > Expands `SOUL.md` [Section 19](SOUL.md#19-roadmap) and [Section 2 (Product Goals)](SOUL.md#2-product-goals). Sequencing here reflects dependency order between modules (`ARCHITECTURE.md` §3) and feature priority tiers (`SOUL.md` §6), not calendar-date commitments — this is a phase plan, not a Gantt chart.
 
@@ -75,7 +75,7 @@ conditional workflows, structured multimodal artifacts, residency/SLA controls,
 and their administration UI are implemented. External identity, payment, and
 regional infrastructure still require operator-owned provider configuration.
 
-**Goal:** Make Agentarium trustworthy and capable enough for regulated/enterprise use, and make the marketplace a real economy.
+**Goal:** Make Deep-Foundry trustworthy and capable enough for regulated/enterprise use, and make the marketplace a real economy.
 
 **In scope** (see `SOUL.md` §6 V3 rows):
 - SSO/SAML, SCIM provisioning, delegated admin roles, compliance evidence export.

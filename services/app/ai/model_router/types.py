@@ -36,7 +36,7 @@ class ToolDefinition:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    model_id: str  # e.g. "deepseek-4"
+    model_id: str  # e.g. "deepseek-v4-flash"
     temperature: float = 1.0
     max_tokens: int | None = None
     stream: bool = False

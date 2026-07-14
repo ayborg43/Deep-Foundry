@@ -49,7 +49,7 @@ class TaskTestBase(TestCase):
             created_by=self.user,
             name="Aria",
             role_description="Complete tasks carefully.",
-            model_binding={"primary": "deepseek-chat"},
+            model_binding={"primary": "deepseek-v4-flash"},
             permission_profile=profile,
         )
         self.client = APIClient()
@@ -95,7 +95,7 @@ class TaskEngineTests(TaskTestBase):
     @patch.object(DeepSeekCloudAdapter, "_post")
     def test_simple_task_completes_and_notifies(self, post, _email_delay):
         post.return_value = {
-            "model": "deepseek-chat",
+            "model": "deepseek-v4-flash",
             "choices": [{"message": {"content": "Weekly report complete."}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 4},
         }
@@ -118,7 +118,7 @@ class TaskEngineTests(TaskTestBase):
         )
         post.side_effect = [
             {
-                "model": "deepseek-chat",
+                "model": "deepseek-v4-flash",
                 "choices": [{
                     "message": {
                         "content": "",
@@ -133,7 +133,7 @@ class TaskEngineTests(TaskTestBase):
                 "usage": {"prompt_tokens": 10, "completion_tokens": 4},
             },
             {
-                "model": "deepseek-chat",
+                "model": "deepseek-v4-flash",
                 "choices": [{"message": {"content": "Task finished safely."}, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 15, "completion_tokens": 5},
             },

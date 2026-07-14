@@ -1,6 +1,6 @@
 ## API.md
 
-# Agentarium — API Design
+# Deep-Foundry — API Design
 
 > Downstream of `SOUL.md` and `ARCHITECTURE.md` ([Section 3, Application Breakdown](ARCHITECTURE.md#3-application-breakdown)). Defines the external REST surface (web/desktop/third-party SDK clients → API Gateway) and the internal module interface between the Core and AI modules of the application (ARCHITECTURE.md ADR-006). Endpoint lists are representative of MVP scope per `SOUL.md` §6, not exhaustive of V2/V3.
 
@@ -79,7 +79,7 @@ GET    /api/v1/coworkers/{id}/analytics?range=30d   (not yet implemented — SOU
   "name": "Aria",
   "avatar_url": null,
   "role_description": "Handles customer support triage...",
-  "model_binding": { "primary": "deepseek-chat", "fallback": ["deepseek-reasoner"] },
+  "model_binding": { "primary": "deepseek-v4-flash", "fallback": ["deepseek-v4-pro"] },
   "permission_profile": { "safe": "auto", "sensitive": "approval", "dangerous": "approval" },
   "attached_tools": [ { "id": "uuid", "name": "web_search", "enabled": true } ],
   "status": "active",
@@ -87,7 +87,7 @@ GET    /api/v1/coworkers/{id}/analytics?range=30d   (not yet implemented — SOU
   "created_at": "2026-07-13T00:00:00Z"
 }
 ```
-`model_binding.primary`/`fallback` values must be DeepSeek model IDs the Model Router actually accepts — `deepseek-chat` or `deepseek-reasoner` (`ai/model_router/adapters/deepseek_cloud.py`), not the illustrative `deepseek/deepseek-v3` placeholder this document originally shipped with in Phase 1, before Milestone 2 settled on DeepSeek's real API model IDs. `attached_skills` from the original illustrative example is dropped until Milestone 5 — `attached_tools` covers what Milestone 3 actually attaches.
+`model_binding.primary`/`fallback` values must be DeepSeek model IDs the Model Router actually accepts — `deepseek-v4-flash` or `deepseek-v4-pro` (`ai/model_router/adapters/deepseek_cloud.py`). `attached_skills` from the original illustrative example is dropped until Milestone 5 — `attached_tools` covers what Milestone 3 actually attaches.
 
 ## 4. Chat
 
@@ -377,7 +377,7 @@ checks unless noted otherwise.
   creator payout ledger.
 
 SCIM calls authenticate with revocable `scm_` bearer tokens. Payment completion
-webhooks authenticate with `X-Agentarium-Payment-Signature`, the lowercase hex
+webhooks authenticate with `X-Deep-Foundry-Payment-Signature`, the lowercase hex
 HMAC-SHA256 of the exact request body. SAML-broker callbacks use a signed,
 ten-minute state token and an HMAC over canonical assertion JSON, then validate
 issuer, audience, and allowed email domains.

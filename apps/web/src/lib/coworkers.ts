@@ -4,16 +4,31 @@
 
 import type { ModelId, RiskClassification } from "./types";
 
-export const MODEL_OPTIONS: { id: ModelId; label: string }[] = [
-  { id: "deepseek-4", label: "DeepSeek 4" },
+export const MODEL_OPTIONS: {
+  id: ModelId;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "deepseek-v4-flash",
+    label: "DeepSeek V4 Flash",
+    description: "Fast and cost-effective for everyday work",
+  },
+  {
+    id: "deepseek-v4-pro",
+    label: "DeepSeek V4 Pro",
+    description: "Higher capability for complex work",
+  },
 ];
 
 export const MODEL_LABELS: Record<ModelId, string> = {
-  "deepseek-4": "DeepSeek 4",
+  "deepseek-v4-flash": "DeepSeek V4 Flash",
+  "deepseek-v4-pro": "DeepSeek V4 Pro",
 };
 
 export const MODEL_SHORT_LABELS: Record<ModelId, string> = {
-  "deepseek-4": "DeepSeek 4",
+  "deepseek-v4-flash": "V4 Flash",
+  "deepseek-v4-pro": "V4 Pro",
 };
 
 // Risk is a trust-relevant, scannable signal (UI_GUIDELINES.md §3.2/§3.4) —

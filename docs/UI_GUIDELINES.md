@@ -1,12 +1,12 @@
 ## UI_GUIDELINES.md
 
-# Agentarium — UI/UX Guidelines
+# Deep-Foundry — UI/UX Guidelines
 
 > Downstream of `SOUL.md` [Section 1.6 (Design Principles)](SOUL.md#16-design-principles) and the interaction-bearing modules in [Section 5](SOUL.md#5-product-modules) (Chat, Coworkers, Voice, Desktop App). Stack per `SOUL.md` §18: Next.js, TypeScript, Tailwind CSS, shadcn/ui.
 
 ## 1. Design Philosophy
 
-Agentarium's interface has to hold two things in tension that most AI products don't: it must feel as immediate and conversational as a chat app, while making persistent, stateful, permissioned entities (coworkers) legible in a way a disposable chat thread never has to be. The UI mantra: **a chat window is a view into a coworker, not the coworker itself.** Every screen should reinforce that the coworker exists before, during, and after any single conversation.
+Deep-Foundry's interface has to hold two things in tension that most AI products don't: it must feel as immediate and conversational as a chat app, while making persistent, stateful, permissioned entities (coworkers) legible in a way a disposable chat thread never has to be. The UI mantra: **a chat window is a view into a coworker, not the coworker itself.** Every screen should reinforce that the coworker exists before, during, and after any single conversation.
 
 Guiding principles inherited from `SOUL.md` §1.6, applied concretely:
 

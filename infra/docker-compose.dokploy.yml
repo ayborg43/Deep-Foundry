@@ -1,3 +1,17 @@
+# Dokploy deployment stack.
+#
+# Purpose-built for a Dokploy "Docker Compose" service. Differences vs the
+# local infra/docker-compose.yml:
+#   * No bundled Traefik `gateway` — Dokploy's shared Traefik does the routing
+#     via the labels below (path-split mirrors infra/traefik-dynamic.yml).
+#   * No host port publishing — every port is reached over Docker networks.
+#     Only `web` and `app` join the external `dokploy-network` so Traefik can
+#     reach them; postgres/redis/minio/sandboxd stay private.
+#   * Domain + secrets come from the Dokploy Environment editor. Critical ones
+#     use ${VAR:?...} so a deploy fails fast with a clear message if unset.
+#
+# Deploy type MUST be "Docker Compose" (not Swarm): sandboxd needs privileged.
+# Point Dokploy's Compose Path at: infra/docker-compose.dokploy.yml
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -5,11 +19,9 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-agentarium}
       POSTGRES_USER: ${DB_USER:-agentarium}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-agentarium}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in Dokploy}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:${DB_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-agentarium}"]
       interval: 5s
@@ -33,12 +45,9 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-agentarium}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-agentarium123}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in Dokploy}
     volumes:
       - minio_data:/data
-    ports:
-      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
 
   # Private daemon for one-container-per-call code execution. The host Docker
   # socket is never mounted into the application or this daemon.
@@ -70,35 +79,35 @@ services:
       sh -c "python manage.py migrate --noinput &&
       uvicorn config.asgi:application --host 0.0.0.0 --port 8000"
     environment: &app_env
-      APP_ENV: ${APP_ENV:-development}
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-insecure-dev-key-do-not-use-in-production}
+      APP_ENV: ${APP_ENV:-production}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in Dokploy}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
-      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:3000}
-      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-cejGCUCoSNmRYVMLQQQX9KGwbOqCiauvwWsHIWy-RPY=}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-${DOMAIN}}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://${DOMAIN}}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://${DOMAIN}}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:?set FIELD_ENCRYPTION_KEY in Dokploy}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
       DB_NAME: ${DB_NAME:-agentarium}
       DB_USER: ${DB_USER:-agentarium}
-      DB_PASSWORD: ${DB_PASSWORD:-agentarium}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in Dokploy}
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_URL: redis://redis:6379/0
       REDIS_CACHE_URL: redis://redis:6379/1
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-agentarium}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-agentarium123}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in Dokploy}
       MINIO_BUCKET: ${MINIO_BUCKET:-agentarium-knowledge}
-      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       EMAIL_HOST: ${EMAIL_HOST:-localhost}
-      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-false}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-Deep-Foundry <noreply@localhost>}
-      WEB_APP_URL: ${WEB_APP_URL:-http://localhost:3000}
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-internal-token-change-in-production}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-Deep-Foundry <noreply@${DOMAIN}>}
+      WEB_APP_URL: ${WEB_APP_URL:-https://${DOMAIN}}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?set INTERNAL_API_TOKEN in Dokploy}
       PAYMENTS_CHECKOUT_BASE_URL: ${PAYMENTS_CHECKOUT_BASE_URL:-}
       PAYMENTS_WEBHOOK_SECRET: ${PAYMENTS_WEBHOOK_SECRET:-}
       WEB_SEARCH_ENDPOINT: ${WEB_SEARCH_ENDPOINT:-https://html.duckduckgo.com/html/}
@@ -109,8 +118,6 @@ services:
       SANDBOX_MEMORY_BYTES: ${SANDBOX_MEMORY_BYTES:-134217728}
       SANDBOX_NANO_CPUS: ${SANDBOX_NANO_CPUS:-500000000}
       SANDBOX_PIDS_LIMIT: ${SANDBOX_PIDS_LIMIT:-64}
-    ports:
-      - "127.0.0.1:${APP_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,6 +130,18 @@ services:
     networks:
       - default
       - sandbox_control
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      # Backend owns the API/AI/internal/health paths (priority beats the
+      # frontend catch-all). Mirrors infra/traefik-dynamic.yml.
+      - "traefik.http.routers.agentarium-backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/ai`) || PathPrefix(`/internal`) || Path(`/health`))"
+      - traefik.http.routers.agentarium-backend.priority=100
+      - traefik.http.routers.agentarium-backend.entrypoints=websecure
+      - traefik.http.routers.agentarium-backend.tls=true
+      - traefik.http.routers.agentarium-backend.tls.certresolver=${CERT_RESOLVER:-letsencrypt}
+      - traefik.http.services.agentarium-backend.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import os, urllib.request; h=os.environ['DJANGO_ALLOWED_HOSTS'].split(',')[0]; r=urllib.request.Request('http://127.0.0.1:8000/health', headers={'Host':h, 'X-Forwarded-Proto':'https'}); urllib.request.urlopen(r, timeout=3)"]
       interval: 10s
@@ -164,34 +183,34 @@ services:
     restart: unless-stopped
     environment:
       INTERNAL_API_BASE_URL: http://app:8000
-    ports:
-      - "127.0.0.1:${WEB_PORT:-3000}:3000"
     depends_on:
       app:
         condition: service_healthy
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      # Frontend catch-all (lowest priority — backend paths win above).
+      - "traefik.http.routers.agentarium-frontend.rule=Host(`${DOMAIN}`)"
+      - traefik.http.routers.agentarium-frontend.priority=1
+      - traefik.http.routers.agentarium-frontend.entrypoints=websecure
+      - traefik.http.routers.agentarium-frontend.tls=true
+      - traefik.http.routers.agentarium-frontend.tls.certresolver=${CERT_RESOLVER:-letsencrypt}
+      - traefik.http.services.agentarium-frontend.loadbalancer.server.port=3000
+      # Redirect all plain-HTTP traffic for this host to HTTPS.
+      - "traefik.http.routers.agentarium-web-insecure.rule=Host(`${DOMAIN}`)"
+      - traefik.http.routers.agentarium-web-insecure.entrypoints=web
+      - traefik.http.routers.agentarium-web-insecure.middlewares=agentarium-https-redirect
+      - traefik.http.middlewares.agentarium-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.agentarium-https-redirect.redirectscheme.permanent=true
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
-
-  gateway:
-    image: traefik:v3.7.1
-    profiles: ["raw"]
-    restart: unless-stopped
-    command:
-      - "--providers.file.filename=/etc/traefik/dynamic.yml"
-      - "--entrypoints.web.address=:80"
-    ports:
-      - "${GATEWAY_PORT:-8080}:80"
-    volumes:
-      - ./traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
-    depends_on:
-      app:
-        condition: service_healthy
-      web:
-        condition: service_healthy
 
 volumes:
   postgres_data:
@@ -200,5 +219,9 @@ volumes:
   sandbox_docker_data:
 
 networks:
+  # Private, no external egress: only app/worker/beat + sandboxd.
   sandbox_control:
     internal: true
+  # Dokploy's shared Traefik network. Created by Dokploy on install.
+  dokploy-network:
+    external: true

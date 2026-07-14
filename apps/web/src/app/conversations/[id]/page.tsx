@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ArrowLeftIcon, BotIcon, ClockIcon, MicIcon, SendIcon, Volume2Icon, WrenchIcon } from "lucide-react";
 
@@ -164,6 +164,7 @@ export default function ConversationPage() {
   const params = useParams<{ id: string }>();
   const conversationId = params.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [coworker, setCoworker] = useState<Coworker | null>(null);
@@ -172,7 +173,8 @@ export default function ConversationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [input, setInput] = useState("");
+  // Seeded from the home composer, which routes here with ?draft=...
+  const [input, setInput] = useState(() => searchParams.get("draft") ?? "");
   const [isSending, setIsSending] = useState(false);
   const [turnError, setTurnError] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
@@ -503,12 +505,12 @@ export default function ConversationPage() {
             className="size-9 shrink-0 rounded-full object-cover"
           />
         ) : (
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
-            <BotIcon className="size-4.5 text-muted-foreground" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
+            <BotIcon className="size-4.5" />
           </div>
         )}
         <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold">{coworker.name}</span>
+          <span className="truncate font-heading text-sm font-semibold">{coworker.name}</span>
           <span className="text-xs text-muted-foreground">
             {MODEL_SHORT_LABELS[coworker.model_binding.primary] ??
               coworker.model_binding.primary}
@@ -523,7 +525,7 @@ export default function ConversationPage() {
             if (message.sender_type === "user") {
               return (
                 <div key={message.id} className="flex justify-end">
-                  <div className="max-w-[80%] rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
+                  <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-secondary px-4 py-2.5 text-sm text-secondary-foreground">
                     {message.content}
                   </div>
                 </div>
@@ -546,11 +548,13 @@ export default function ConversationPage() {
                   <span className="font-medium text-foreground">{coworker.name}</span>
                 </div>
                 {message.content ? (
-                  <div className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm">
+                  <div className="max-w-full whitespace-pre-wrap pl-6 text-sm leading-relaxed text-foreground">
                     {message.content}
                   </div>
                 ) : null}
-                {(message.tool_calls ?? []).map((call) => renderPersistedToolCall(message, call))}
+                <div className="flex flex-col gap-1.5 pl-6">
+                  {(message.tool_calls ?? []).map((call) => renderPersistedToolCall(message, call))}
+                </div>
               </div>
             );
           })}
@@ -570,14 +574,22 @@ export default function ConversationPage() {
               )}
               <span className="font-medium text-foreground">{coworker.name}</span>
               {!streamingText && liveToolCalls.length === 0 ? (
-                <span className="text-muted-foreground">Thinking...</span>
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <span className="inline-flex gap-1">
+                    <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+                    <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+                    <span className="size-1.5 animate-bounce rounded-full bg-primary" />
+                  </span>
+                  Thinking
+                </span>
               ) : null}
             </div>
             {streamingText ? (
-              <div className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm">
+              <div className="max-w-full whitespace-pre-wrap pl-6 text-sm leading-relaxed text-foreground">
                 {streamingText}
               </div>
             ) : null}
+            <div className="flex flex-col gap-1.5 pl-6">
             {liveToolCalls.map((tc, i) => {
               const isPendingHere = pendingApproval !== null && tc.result === null;
               if (isPendingHere) {
@@ -604,6 +616,7 @@ export default function ConversationPage() {
                 />
               );
             })}
+            </div>
           </div>
         ) : null}
 
@@ -616,40 +629,47 @@ export default function ConversationPage() {
         </Alert>
       ) : null}
 
-      <form onSubmit={handleSend} className="flex items-end gap-2 border-t pt-3">
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleInputKeyDown}
-          placeholder={
-            pendingApproval
-              ? "Resolve the pending approval to continue..."
-              : `Message ${coworker.name}...`
-          }
-          disabled={inputDisabled}
-          rows={1}
-          className="max-h-40 min-h-9 flex-1 resize-none py-1.5"
-          aria-label={`Message ${coworker.name}`}
-        />
-        <Button type="button" size="icon" variant="outline" disabled={inputDisabled || isListening} onClick={startVoiceInput} aria-pressed={isListening}>
-          <span className="sr-only">{isListening ? "Listening" : "Dictate message"}</span><MicIcon />
-        </Button>
-        <Button type="button" size="icon" variant="outline" onClick={speakLatestReply} disabled={!messages.some((message) => message.sender_type === "coworker" && message.content)}>
-          <span className="sr-only">Read latest coworker reply aloud</span><Volume2Icon />
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={inputDisabled || isHandingOff || !input.trim()}
-          onClick={handleBackgroundHandoff}
-        >
-          <ClockIcon data-icon="inline-start" />
-          {isHandingOff ? "Queuing..." : "Background"}
-        </Button>
-        <Button type="submit" size="icon" disabled={inputDisabled || !input.trim()}>
-          <span className="sr-only">Send message</span>
-          <SendIcon />
-        </Button>
+      <form onSubmit={handleSend} className="pt-2">
+        <div className="rounded-2xl border border-border bg-card p-2 shadow-sm transition-colors focus-within:border-primary/50 focus-within:ring-3 focus-within:ring-primary/15">
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleInputKeyDown}
+            placeholder={
+              pendingApproval
+                ? "Resolve the pending approval to continue..."
+                : `Message ${coworker.name}...`
+            }
+            disabled={inputDisabled}
+            rows={1}
+            className="max-h-40 min-h-10 w-full resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
+            aria-label={`Message ${coworker.name}`}
+          />
+          <div className="flex items-center justify-between gap-2 px-1 pt-1">
+            <div className="flex items-center gap-1">
+              <Button type="button" size="icon-sm" variant="ghost" disabled={inputDisabled || isListening} onClick={startVoiceInput} aria-pressed={isListening}>
+                <span className="sr-only">{isListening ? "Listening" : "Dictate message"}</span><MicIcon />
+              </Button>
+              <Button type="button" size="icon-sm" variant="ghost" onClick={speakLatestReply} disabled={!messages.some((message) => message.sender_type === "coworker" && message.content)}>
+                <span className="sr-only">Read latest coworker reply aloud</span><Volume2Icon />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={inputDisabled || isHandingOff || !input.trim()}
+                onClick={handleBackgroundHandoff}
+              >
+                <ClockIcon data-icon="inline-start" />
+                {isHandingOff ? "Queuing..." : "Run in background"}
+              </Button>
+            </div>
+            <Button type="submit" size="icon" disabled={inputDisabled || !input.trim()}>
+              <span className="sr-only">Send message</span>
+              <SendIcon />
+            </Button>
+          </div>
+        </div>
       </form>
     </div>
   );

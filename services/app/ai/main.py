@@ -9,7 +9,7 @@ from fastapi import FastAPI
 
 from ai.internal_routes import router as internal_router
 
-app = FastAPI(title="Agentarium AI Modules")
+app = FastAPI(title="Deep-Foundry AI Modules")
 app.include_router(internal_router)
 
 

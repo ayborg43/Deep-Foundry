@@ -1,4 +1,4 @@
-"""Public Agentarium SDK API."""
+"""Public Deep-Foundry SDK API."""
 
 from .manifest import ManifestError, load_manifest, validate_manifest
 

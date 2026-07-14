@@ -38,6 +38,7 @@ export default function LoginPage() {
     try {
       const result = await apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
+        auth: false,
         body: JSON.stringify({ email, password }),
       });
 
@@ -47,7 +48,7 @@ export default function LoginPage() {
       }
 
       setTokens(result.tokens);
-      router.push("/");
+      router.push("/home");
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -68,10 +69,11 @@ export default function LoginPage() {
     try {
       const result = await apiFetch<{ tokens: Tokens }>("/auth/mfa/verify", {
         method: "POST",
+        auth: false,
         body: JSON.stringify({ mfa_token: mfaToken, code }),
       });
       setTokens(result.tokens);
-      router.push("/");
+      router.push("/home");
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -85,8 +87,12 @@ export default function LoginPage() {
 
   if (mfaToken) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
+        <Link href="/" className="flex flex-col items-center gap-1.5 text-center">
+          <span aria-hidden className="text-3xl leading-none text-primary">✳</span>
+          <span className="font-heading text-xl font-semibold tracking-tight">Deep-Foundry</span>
+        </Link>
+        <Card className="w-full max-w-sm shadow-xl shadow-foreground/5">
           <CardHeader>
             <CardTitle className="text-xl">Two-factor verification</CardTitle>
             <CardDescription>
@@ -138,11 +144,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
+      <Link href="/" className="flex flex-col items-center gap-1.5 text-center">
+        <span aria-hidden className="text-3xl leading-none text-primary">✳</span>
+        <span className="font-heading text-xl font-semibold tracking-tight">Deep-Foundry</span>
+      </Link>
+      <Card className="w-full max-w-sm shadow-xl shadow-foreground/5">
         <CardHeader>
-          <CardTitle className="text-xl">Log in</CardTitle>
-          <CardDescription>Welcome back to Agentarium.</CardDescription>
+          <CardTitle className="text-xl">Welcome back</CardTitle>
+          <CardDescription>Log in to your Deep-Foundry workspace.</CardDescription>
         </CardHeader>
         <form onSubmit={handleLoginSubmit}>
           <CardContent className="flex flex-col gap-4">

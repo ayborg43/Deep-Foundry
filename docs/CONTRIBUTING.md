@@ -1,12 +1,12 @@
 ## CONTRIBUTING.md
 
-# Contributing to Agentarium
+# Contributing to Deep-Foundry
 
 > Operationalizes `SOUL.md` [Section 20 (Development Rules)](SOUL.md#20-development-rules) and principle 6, "Community first" ([Section 3](SOUL.md#3-product-principles)). If anything here conflicts with `SOUL.md`, `SOUL.md` governs — open an issue proposing a revision to this document instead of quietly diverging from it.
 
 ## 1. Before You Start
 
-Agentarium is documentation-first. Read `SOUL.md` in full before proposing any feature — it is the constitution every contribution is measured against. If your idea contradicts a principle or concept in `SOUL.md`, the correct first PR is a proposed revision to `SOUL.md` itself, discussed and merged before any implementation PR builds on it.
+Deep-Foundry is documentation-first. Read `SOUL.md` in full before proposing any feature — it is the constitution every contribution is measured against. If your idea contradicts a principle or concept in `SOUL.md`, the correct first PR is a proposed revision to `SOUL.md` itself, discussed and merged before any implementation PR builds on it.
 
 For structural changes, also check: `ARCHITECTURE.md` (service boundaries), `DATABASE.md` (schema), `API.md` (contracts), `SECURITY.md` (permission/risk model), `UI_GUIDELINES.md` (client-facing conventions).
 

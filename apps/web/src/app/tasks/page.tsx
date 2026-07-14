@@ -3,28 +3,20 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ClockIcon, PlusIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/status-badge";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
-import type { BackgroundTask, Coworker, TaskStatus } from "@/lib/types";
-
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  pending: "Pending",
-  in_progress: "Working",
-  needs_approval: "Needs approval",
-  blocked: "Blocked",
-  completed: "Completed",
-  failed: "Failed",
-};
+import type { BackgroundTask, Coworker } from "@/lib/types";
 
 export default function TasksPage() {
   const router = useRouter();
@@ -74,11 +66,15 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-12">
-      <div><h1 className="text-xl font-semibold">Background tasks</h1><p className="text-sm text-muted-foreground">Assign work and return when your coworker finishes or needs approval.</p></div>
+    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6">
+      <PageHeader
+        eyebrow="Workspace"
+        title="Tasks"
+        description="Hand work to a coworker and walk away. It runs in the background and comes back when it's done — or when it needs your approval to proceed."
+      />
       {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
       <Card>
-        <CardHeader><CardTitle>New task</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="font-heading text-lg">New task</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5"><Label htmlFor="task-coworker">Coworker</Label><Select value={coworkerId} onValueChange={setCoworkerId}><SelectTrigger id="task-coworker" className="w-full"><SelectValue placeholder="Choose a coworker" /></SelectTrigger><SelectContent>{coworkers.map((coworker) => <SelectItem key={coworker.id} value={coworker.id}>{coworker.name}</SelectItem>)}</SelectContent></Select></div>
           <div className="flex flex-col gap-1.5"><Label htmlFor="task-title">Title</Label><Input id="task-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Prepare the weekly summary" /></div>
@@ -86,8 +82,24 @@ export default function TasksPage() {
           <Button className="w-fit" disabled={busy || !coworkerId || !title.trim() || !description.trim()} onClick={createTask}><PlusIcon data-icon="inline-start" />{busy ? "Queuing..." : "Assign task"}</Button>
         </CardContent>
       </Card>
-      <div className="flex flex-col gap-3">
-        {tasks.length === 0 ? <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No background tasks yet.</CardContent></Card> : tasks.map((task) => <Link key={task.id} href={`/tasks/${task.id}`}><Card className="transition-colors hover:bg-muted/40"><CardContent className="flex items-center justify-between gap-4"><div className="min-w-0"><p className="truncate font-medium">{task.title}</p><p className="text-xs text-muted-foreground">{task.coworker_name} · {new Date(task.created_at).toLocaleString()}</p></div><Badge variant={task.status === "failed" || task.status === "blocked" ? "destructive" : "outline"}><ClockIcon className="mr-1 size-3" />{STATUS_LABEL[task.status]}</Badge></CardContent></Card></Link>)}
+      <div className="flex flex-col gap-2.5">
+        {tasks.length === 0 ? (
+          <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">No background tasks yet. Assign one above to get started.</CardContent></Card>
+        ) : (
+          tasks.map((task) => (
+            <Link key={task.id} href={`/tasks/${task.id}`} className="group/task">
+              <Card className="transition-all group-hover/task:border-primary/40 group-hover/task:shadow-sm">
+                <CardContent className="flex items-center justify-between gap-4 py-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">{task.coworker_name} · {new Date(task.created_at).toLocaleString()}</p>
+                  </div>
+                  <StatusBadge status={task.status} />
+                </CardContent>
+              </Card>
+            </Link>
+          ))
+        )}
       </div>
     </div>
   );

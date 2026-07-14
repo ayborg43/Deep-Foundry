@@ -90,7 +90,8 @@ export default function CoworkerDetailPage() {
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
-  const [primaryModel, setPrimaryModel] = useState<ModelId>("deepseek-4");
+  const [primaryModel, setPrimaryModel] =
+    useState<ModelId>("deepseek-v4-flash");
   const [changelog, setChangelog] = useState("");
   const [isSavingIdentity, setIsSavingIdentity] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
@@ -539,6 +540,11 @@ export default function CoworkerDetailPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                {MODEL_OPTIONS.find((option) => option.id === primaryModel)
+                  ?.description ??
+                  "This legacy model should be changed to a current option."}
+              </p>
             </div>
 
             {(roleDescription !== initial?.roleDescription ||
@@ -790,10 +796,9 @@ export default function CoworkerDetailPage() {
                           </Badge>
                         </div>
                         <p className="text-muted-foreground">
-                          {/* Older versions may reference a model id retired
-                              since (e.g. deepseek-chat/deepseek-reasoner,
-                              replaced by deepseek-4) — fall back to the raw
-                              id rather than showing "undefined". */}
+                          {/* Older versions may reference a retired model id;
+                              fall back to the raw id rather than showing
+                              "undefined". */}
                           {MODEL_LABELS[version.model_binding.primary] ??
                             version.model_binding.primary}
                           {version.model_binding.fallback?.length

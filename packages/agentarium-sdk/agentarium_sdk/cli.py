@@ -23,7 +23,7 @@ def _request(base_url: str, token: str, path: str, payload: dict) -> dict:
             return json.load(response)
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")
-        raise RuntimeError(f"Agentarium returned HTTP {exc.code}: {detail}") from exc
+        raise RuntimeError(f"Deep-Foundry returned HTTP {exc.code}: {detail}") from exc
 
 
 def _validated(path: str) -> tuple[dict, Path]:
@@ -53,9 +53,9 @@ def cmd_test(args: argparse.Namespace) -> int:
 
 def cmd_publish(args: argparse.Namespace) -> int:
     manifest, root = _validated(args.manifest)
-    token = args.token or os.getenv("AGENTARIUM_TOKEN")
+    token = args.token or os.getenv("DEEP_FOUNDRY_TOKEN") or os.getenv("AGENTARIUM_TOKEN")
     if not token:
-        raise ManifestError("Pass --token or set AGENTARIUM_TOKEN.")
+        raise ManifestError("Pass --token or set DEEP_FOUNDRY_TOKEN.")
     listing = _request(args.base_url, token, "/marketplace/listings", {
         "publisher_workspace_id": args.workspace_id,
         "listing_type": manifest["listing_type"], "name": manifest["name"],
@@ -74,12 +74,16 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="agentarium")
+    parser = argparse.ArgumentParser(prog="deep-foundry")
     commands = parser.add_subparsers(dest="command", required=True)
     for name, handler in (("validate", cmd_validate), ("test", cmd_test)):
         command = commands.add_parser(name); command.add_argument("manifest"); command.set_defaults(handler=handler)
     publish = commands.add_parser("publish"); publish.add_argument("manifest"); publish.add_argument("--workspace-id", required=True)
-    publish.add_argument("--base-url", default=os.getenv("AGENTARIUM_URL", "http://localhost:8000")); publish.add_argument("--token"); publish.add_argument("--changelog", default="Published with Agentarium SDK"); publish.set_defaults(handler=cmd_publish)
+    publish.add_argument(
+        "--base-url",
+        default=os.getenv("DEEP_FOUNDRY_URL")
+        or os.getenv("AGENTARIUM_URL", "http://localhost:8000"),
+    ); publish.add_argument("--token"); publish.add_argument("--changelog", default="Published with Deep-Foundry SDK"); publish.set_defaults(handler=cmd_publish)
     args = parser.parse_args()
     try:
         raise SystemExit(args.handler(args))

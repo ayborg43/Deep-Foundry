@@ -1,4 +1,4 @@
-# Self-hosting Agentarium
+# Self-hosting Deep-Foundry
 
 This is the operator runbook for the MVP described in
 [ARCHITECTURE.md §8.1](ARCHITECTURE.md#81-self-hosted-dokploy) and

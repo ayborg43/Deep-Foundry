@@ -1,5 +1,5 @@
 """
-ASGI entrypoint for the Agentarium modular monolith.
+ASGI entrypoint for the Deep-Foundry modular monolith.
 
 Per ARCHITECTURE.md ADR-006, this mounts the AI modules' FastAPI app at /ai/*
 inside the same ASGI process Django serves everything else from — one image,

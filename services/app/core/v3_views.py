@@ -370,7 +370,11 @@ class MarketplacePaymentWebhookView(APIView):
     def post(self, request):
         secret = getattr(settings, "PAYMENTS_WEBHOOK_SECRET", "")
         expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest()
-        if not secret or not hmac.compare_digest(request.headers.get("X-Agentarium-Payment-Signature", ""), expected): return Response({"error": "invalid_signature"}, status=401)
+        signature = request.headers.get("X-Deep-Foundry-Payment-Signature") or request.headers.get(
+            "X-Agentarium-Payment-Signature", ""
+        )
+        if not secret or not hmac.compare_digest(signature, expected):
+            return Response({"error": "invalid_signature"}, status=401)
         order = get_object_or_404(MarketplaceOrder, id=request.data.get("order_id"))
         complete_marketplace_order(order, request.data.get("provider_reference", ""))
         install_dependencies(order.listing_version, workspace=order.workspace, user=order.buyer)
