@@ -79,6 +79,17 @@ export function setWorkspaceId(id: string): void {
   }
 }
 
+// Synchronous read of the persisted active workspace, without the network
+// fallback getWorkspaceId does. Used by the workspace switcher to highlight the
+// current selection immediately on mount.
+export function getStoredWorkspaceId(): string | null {
+  if (typeof window === "undefined") return null;
+  return (
+    window.localStorage.getItem(WORKSPACE_ID_KEY) ??
+    window.localStorage.getItem(LEGACY_WORKSPACE_ID_KEY)
+  );
+}
+
 export async function getWorkspaceId(): Promise<string | null> {
   if (typeof window !== "undefined") {
     const stored =

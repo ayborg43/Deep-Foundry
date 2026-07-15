@@ -737,3 +737,79 @@ class SubscriptionView(APIView):
         workspace.plan_tier = tier
         workspace.save(update_fields=["plan_tier"])
         return Response({"plan_tier": subscription.plan_tier, "status": subscription.status})
+
+
+# --- Starter teams (templates + AI-designed) -------------------------------
+# GET /team-templates, POST /workspaces/{id}/provision-team, and
+# POST /workspaces/{id}/team-suggestions. Both provisioning inputs (a curated
+# template key, or a reviewed spec — typically from ai.team_designer) funnel
+# into core.starter_teams.provision_team.
+
+
+class TeamTemplateListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        from core.starter_teams import template_catalog
+
+        return Response(template_catalog())
+
+
+class ProvisionTeamView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, workspace_id: str) -> Response:
+        from core.starter_teams import provision_team, provision_template
+
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        template_key = request.data.get("template")
+        if template_key:
+            result = provision_template(
+                workspace=workspace, created_by=request.user, template_key=str(template_key)
+            )
+        else:
+            result = provision_team(
+                workspace=workspace,
+                created_by=request.user,
+                spec={
+                    "team_name": request.data.get("team_name", ""),
+                    "collaboration_pattern": request.data.get("collaboration_pattern", ""),
+                    "coworkers": request.data.get("coworkers") or [],
+                },
+            )
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="starter_team.provision",
+            resource_type="workspace", resource_id=workspace.id, workspace_id=workspace.id,
+            metadata={
+                "template": str(template_key) if template_key else None,
+                "coworkers": [row["name"] for row in result["coworkers"]],
+            },
+        )
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class TeamSuggestionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, workspace_id: str) -> Response:
+        from ai.model_router.errors import AdapterError
+        from ai.team_designer import TeamDesignError, design_team
+        from core.interface import CredentialNotFoundError
+
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        description = str(request.data.get("description", "")).strip()
+        if not description:
+            raise ValidationError({"description": "Describe the company or project first."})
+        try:
+            spec = design_team(workspace_id=workspace.id, description=description)
+        except CredentialNotFoundError:
+            return Response(
+                {"error": {"code": "provider_credential_required", "message": "Add a DeepSeek API key under Settings → Model providers first.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except (TeamDesignError, AdapterError) as exc:
+            return Response(
+                {"error": {"code": "team_design_failed", "message": f"Couldn't design a team: {exc}", "details": {}}},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(spec)
