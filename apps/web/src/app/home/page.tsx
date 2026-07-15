@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { PlusIcon, MicIcon, ArrowUpIcon, BellIcon, InboxIcon, Wand2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { LogoMark } from "@/components/logo";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
@@ -108,15 +109,15 @@ export default function HomePage() {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 py-16">
       {/* Greeting */}
-      <div className="mb-8 flex items-center justify-center gap-3">
-        <span aria-hidden className="text-3xl leading-none text-primary">✳</span>
-        <h1 className="font-heading text-3xl font-medium tracking-tight sm:text-4xl">
+      <div className="mb-8 flex flex-col items-center gap-3.5 text-center">
+        <LogoMark className="size-10" />
+        <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-[1.75rem]">
           {greeting()}{name ? `, ${name}` : ""}
         </h1>
       </div>
 
       {/* Composer */}
-      <div className="rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
+      <div className="rounded-2xl border border-border bg-card p-3 shadow-[var(--shadow-md)] transition-[border-color,box-shadow] focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
         <textarea
           ref={textareaRef}
           value={input}

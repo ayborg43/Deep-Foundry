@@ -29,6 +29,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 
+import { Wordmark } from "@/components/logo";
 import { apiFetch } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import type { Conversation } from "@/lib/types";
@@ -43,6 +44,7 @@ type NavGroup = { label: string; items: NavItem[] };
 // destinations, not twenty-two. Related screens (Teams, Approvals, Memory,
 // Artifacts) live as sub-tabs of these, not as separate rail entries.
 const PRIMARY: NavItem[] = [
+  { href: "/home", label: "Home", icon: HomeIcon },
   { href: "/coworkers", label: "Coworkers", icon: Users, match: ["/agent-teams"] },
   { href: "/tasks", label: "Tasks", icon: ListTodo, match: ["/approvals"] },
   { href: "/conversations", label: "Conversations", icon: MessageSquare },
@@ -85,14 +87,6 @@ function isActive(pathname: string, item: NavItem) {
   return targets.some((href) => pathname === href || pathname.startsWith(`${href}/`));
 }
 
-function navItemClass(active: boolean) {
-  return `flex min-h-9 items-center gap-2.5 rounded-md px-3 text-sm transition-colors ${
-    active
-      ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-      : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-  }`;
-}
-
 function NavRow({
   item,
   pathname,
@@ -110,9 +104,23 @@ function NavRow({
         href={item.href}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
-        className={navItemClass(active)}
+        className={`group relative flex min-h-[2.125rem] items-center gap-2.5 rounded-md px-3 text-[0.8125rem] font-medium transition-colors ${
+          active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
+        }`}
       >
-        <Icon className={`size-4 shrink-0 ${active ? "text-primary" : ""}`} />
+        {active ? (
+          <span
+            aria-hidden
+            className="absolute left-0 top-1/2 h-[18px] w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+          />
+        ) : null}
+        <Icon
+          className={`size-4 shrink-0 transition-colors ${
+            active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground/80"
+          }`}
+        />
         <span className="truncate">{item.label}</span>
       </Link>
     </li>
@@ -135,16 +143,16 @@ function CollapsibleGroup({
   const open = override ?? hasActive;
 
   return (
-    <div className="mb-1">
+    <div className="mt-1">
       <button
         type="button"
         onClick={() => setOverride(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+        className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-muted-foreground"
       >
         <span>{group.label}</span>
         <ChevronDown
-          className={`ml-auto size-3.5 transition-transform ${open ? "" : "-rotate-90"}`}
+          className={`ml-auto size-3.5 transition-transform duration-200 ${open ? "" : "-rotate-90"}`}
         />
       </button>
       {open ? (
@@ -181,38 +189,25 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       <Link
         href="/home"
         onClick={onNavigate}
-        className="flex items-center gap-2.5 px-5 pt-5 pb-4"
+        aria-label="Deep-Foundry home"
+        className="flex items-center px-4 pt-4 pb-3.5"
       >
-        <span aria-hidden className="text-xl leading-none text-primary">✳</span>
-        <span className="font-heading text-lg font-semibold tracking-tight">Deep-Foundry</span>
+        <Wordmark />
       </Link>
 
-      <div className="grid gap-0.5 px-3 pb-3">
+      <div className="px-3 pb-2">
         <Link
           href="/home"
           onClick={onNavigate}
-          className="flex min-h-9 items-center gap-2.5 rounded-md bg-primary/12 px-3 text-sm font-medium text-primary transition-colors hover:bg-primary/18"
+          className="flex min-h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-[0.8125rem] font-semibold text-primary-foreground shadow-[var(--shadow-sm)] transition-[background-color,box-shadow] hover:bg-[color-mix(in_oklch,var(--primary),black_10%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
         >
           <PlusIcon className="size-4 shrink-0" />
-          New
-        </Link>
-        <Link
-          href="/home"
-          onClick={onNavigate}
-          aria-current={pathname === "/home" ? "page" : undefined}
-          className={`flex min-h-9 items-center gap-2.5 rounded-md px-3 text-sm transition-colors ${
-            pathname === "/home"
-              ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-          }`}
-        >
-          <HomeIcon className={`size-4 shrink-0 ${pathname === "/home" ? "text-primary" : ""}`} />
-          Home
+          New task
         </Link>
       </div>
 
       <nav aria-label="Primary navigation" className="flex-1 overflow-y-auto px-3 pb-4">
-        <ul className="mb-4 grid gap-0.5">
+        <ul className="grid gap-0.5">
           {PRIMARY.map((item) => (
             <NavRow key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
           ))}
@@ -228,8 +223,8 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         ))}
 
         {recents.length > 0 ? (
-          <div className="mb-4 mt-4">
-            <p className="px-3 pb-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground/70">
+          <div className="mt-4">
+            <p className="px-3 pb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground/60">
               Recents
             </p>
             <ul className="grid gap-0.5">
@@ -243,9 +238,13 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
                       href={`/conversations/${conv.id}`}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
-                      className={navItemClass(active)}
+                      className={`group flex min-h-8 items-center gap-2.5 rounded-md px-3 text-[0.8125rem] transition-colors ${
+                        active
+                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                          : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
+                      }`}
                     >
-                      <MessageSquareIcon className="size-4 shrink-0 opacity-70" />
+                      <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground/60 group-hover:text-foreground/70" />
                       <span className="truncate">{conv.title || "Untitled conversation"}</span>
                     </Link>
                   </li>

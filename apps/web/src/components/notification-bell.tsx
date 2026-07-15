@@ -49,7 +49,7 @@ export function NotificationBell() {
         ) : null}
       </Button>
       {open ? (
-        <div className="absolute right-0 top-9 z-50 w-80 rounded-lg border bg-background p-2 shadow-lg">
+        <div className="absolute right-0 top-10 z-50 w-80 rounded-xl border border-border bg-popover p-1.5 shadow-[var(--shadow-lg)]">
           <p className="px-2 py-1 text-xs font-medium text-muted-foreground">Notifications</p>
           {items.length === 0 ? (
             <p className="px-2 py-4 text-sm text-muted-foreground">You&apos;re all caught up.</p>
