@@ -1,5 +1,8 @@
+import logging
+
 import pyotp
 from django.conf import settings
+from django.db import transaction
 from django.core import signing
 from django.core.signing import BadSignature, SignatureExpired
 from django.shortcuts import get_object_or_404
@@ -48,6 +51,8 @@ from core.serializers import (
 
 MFA_LOGIN_SALT = "mfa-login"
 MFA_LOGIN_TOKEN_MAX_AGE = 300  # 5 minutes
+
+logger = logging.getLogger(__name__)
 
 
 class HealthView(APIView):
@@ -278,12 +283,52 @@ class GoogleOAuthCallbackView(APIView):
         )
 
 
-class MeView(generics.RetrieveUpdateAPIView):
+class MeView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self) -> User:
         return self.request.user
+
+    def destroy(self, request: Request, *args, **kwargs) -> Response:
+        """Permanently delete the authenticated user's account and their data.
+
+        Guarded by re-typing the exact account email — a provider-agnostic
+        confirmation (works for password and OAuth accounts) against
+        accidental or drive-by deletion.
+
+        Deletion order matters: Django enforces on_delete in Python, not the
+        DB, and a coworker version PROTECTs its workspace's permission profile
+        (core.models.CoworkerVersion.permission_profile). So we delete the
+        workspace's coworkers (cascading their versions) *before* deleting the
+        workspace, whose cascade then reaches the now-unprotected profiles.
+        Deleting the user last clears memberships and OAuth identities.
+
+        Notes / future hardening: a user who owns a shared organization
+        workspace takes it (and other members' access) down with them — fine
+        at personal-workspace scope. Heavy Phase 2+ usage (agent-team runs,
+        workflow runs, marketplace orders) has its own PROTECT chains not
+        unwound here; those would need the same leaf-first treatment.
+        """
+        user = self.get_object()
+        confirm = str(request.data.get("confirm_email") or "").strip().lower()
+        if confirm != user.email.strip().lower():
+            return _error(
+                "confirmation_required",
+                "Enter your account email exactly to confirm deletion.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        user_id = user.id
+        with transaction.atomic():
+            owned_ids = list(
+                Workspace.objects.filter(owner=user).values_list("id", flat=True)
+            )
+            if owned_ids:
+                Coworker.objects.filter(workspace_id__in=owned_ids).delete()
+                Workspace.objects.filter(id__in=owned_ids).delete()
+            user.delete()
+        logger.info("account_deleted user_id=%s", user_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class WorkspaceListView(generics.ListAPIView):
