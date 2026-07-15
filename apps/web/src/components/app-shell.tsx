@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SectionTabs } from "@/components/section-tabs";
 import { NotificationBell } from "@/components/notification-bell";
+import { Wordmark } from "@/components/logo";
 import { apiFetch } from "@/lib/api";
 import { clearTokens, getTokens, getWorkspaceId } from "@/lib/auth";
 import type { User, Workspace } from "@/lib/types";
@@ -21,6 +22,43 @@ function isPublicRoute(pathname: string): boolean {
     pathname.startsWith("/signup") ||
     pathname.startsWith("/auth")
   );
+}
+
+// Longest-prefix match → the label shown in the top bar. Sub-tab routes resolve
+// to their section (e.g. /agent-teams → "Coworkers"); the SectionTabs strip
+// below the bar handles the finer level.
+const TITLES: [string, string][] = [
+  ["/home", "Home"],
+  ["/coworkers", "Coworkers"],
+  ["/agent-teams", "Coworkers"],
+  ["/tasks", "Tasks"],
+  ["/approvals", "Tasks"],
+  ["/conversations", "Conversations"],
+  ["/knowledge", "Knowledge"],
+  ["/memory", "Knowledge"],
+  ["/artifacts", "Knowledge"],
+  ["/workflows", "Workflows"],
+  ["/marketplace", "Marketplace"],
+  ["/observability/usage", "Usage"],
+  ["/observability/audit", "Audit log"],
+  ["/governance", "Governance"],
+  ["/evolution", "Adaptive collaboration"],
+  ["/voice", "Live voice"],
+  ["/creator", "Creator payouts"],
+  ["/settings/organization", "Organization"],
+  ["/settings/integrations", "Integrations"],
+  ["/settings/enterprise", "Enterprise controls"],
+  ["/settings/provider-credentials", "Model providers"],
+  ["/settings/mfa", "Security"],
+  ["/settings/workspace", "Workspace"],
+  ["/settings", "Settings"],
+];
+
+function routeTitle(pathname: string): string {
+  const match = TITLES.filter(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`)).sort(
+    (a, b) => b[0].length - a[0].length,
+  )[0];
+  return match?.[1] ?? "Deep-Foundry";
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -83,11 +121,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-full flex-col">
         <header className="border-b border-border/70">
           <div className="mx-auto flex min-h-14 max-w-6xl items-center justify-between gap-3 px-4">
-            <Link href="/" className="flex items-center gap-2.5">
-              <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-                A
-              </span>
-              <span className="font-heading text-base font-semibold tracking-tight">Deep-Foundry</span>
+            <Link href="/" aria-label="Deep-Foundry home">
+              <Wordmark />
             </Link>
             <nav className="flex items-center gap-1 text-sm">
               <Button asChild variant="ghost" size="sm">
@@ -162,7 +197,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b border-border/70 bg-background/80 px-4 backdrop-blur-md">
+        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-1.5 border-b border-border/70 bg-background/80 px-3 backdrop-blur-md sm:px-4">
           <Button
             variant="ghost"
             size="icon"
@@ -172,9 +207,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <MenuIcon className="size-5" />
           </Button>
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+            {routeTitle(pathname)}
+          </h1>
           <div className="flex-1" />
           {isAuthed ? (
-            <NotificationBell />
+            <div className="flex items-center gap-0.5">
+              <NotificationBell />
+              <Link
+                href="/settings/workspace"
+                aria-label="Account and settings"
+                className="ml-1 flex size-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary ring-1 ring-inset ring-primary/15 transition-colors hover:bg-primary/15"
+              >
+                {accountInitial}
+              </Link>
+            </div>
           ) : (
             <Button asChild size="sm">
               <Link href="/login">Log in</Link>
