@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 import { Wordmark } from "@/components/logo";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { apiFetch } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import type { Conversation } from "@/lib/types";
@@ -194,6 +195,8 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       >
         <Wordmark />
       </Link>
+
+      <WorkspaceSwitcher />
 
       <div className="px-3 pb-2">
         <Link
