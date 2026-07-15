@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch, ApiRequestError } from "@/lib/api";
-import { getTokens } from "@/lib/auth";
+import { clearTokens, getTokens } from "@/lib/auth";
 import type { User } from "@/lib/types";
 
 type EnrollResponse = { secret: string; otpauth_url: string };
@@ -31,6 +31,12 @@ export default function MfaSettingsPage() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+
+  // Delete-account danger zone.
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getTokens()) {
@@ -93,8 +99,33 @@ export default function MfaSettingsPage() {
     }
   }
 
+  const emailMatches =
+    !!me && deleteConfirm.trim().toLowerCase() === me.email.trim().toLowerCase();
+
+  async function handleDelete(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!emailMatches || isDeleting) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiFetch("/me", {
+        method: "DELETE",
+        body: JSON.stringify({ confirm_email: deleteConfirm.trim() }),
+      });
+      clearTokens();
+      router.push("/signup");
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiRequestError
+          ? err.message
+          : "Couldn't delete your account. Please try again."
+      );
+      setIsDeleting(false);
+    }
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-12">
+    <div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-12">
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">Two-factor authentication</CardTitle>
@@ -167,6 +198,74 @@ export default function MfaSettingsPage() {
                 </Button>
               </form>
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="text-xl text-destructive">Delete account</CardTitle>
+          <CardDescription>
+            Permanently delete your account, your personal workspace, and everything in it —
+            coworkers, tasks, conversations, knowledge, and memory. This cannot be undone.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-4">
+          {deleteError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{deleteError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {!showDelete ? (
+            <Button
+              type="button"
+              variant="destructive"
+              className="w-fit"
+              disabled={isLoading || !me}
+              onClick={() => setShowDelete(true)}
+            >
+              Delete account
+            </Button>
+          ) : (
+            <form onSubmit={handleDelete} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="delete_confirm">
+                  Type <span className="font-semibold text-foreground">{me?.email}</span> to confirm
+                </Label>
+                <Input
+                  id="delete_confirm"
+                  type="email"
+                  autoComplete="off"
+                  placeholder={me?.email}
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
+                  aria-invalid={deleteConfirm.length > 0 && !emailMatches}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={!emailMatches || isDeleting}
+                >
+                  {isDeleting ? "Deleting…" : "Permanently delete account"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    setShowDelete(false);
+                    setDeleteConfirm("");
+                    setDeleteError(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
           )}
         </CardContent>
       </Card>

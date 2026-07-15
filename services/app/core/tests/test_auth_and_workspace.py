@@ -5,7 +5,15 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from core.models import OAuthIdentity, ProviderCredential, User, Workspace, WorkspaceMember
+from core.models import (
+    Coworker,
+    OAuthIdentity,
+    ProviderCredential,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
+from core.provisioning import provision_personal_workspace
 
 VALID_PASSWORD = "correct horse battery staple 42"
 
@@ -40,6 +48,26 @@ class RegisterTests(APITestCase):
         membership = WorkspaceMember.objects.get(workspace=workspace, user=user)
         self.assertEqual(membership.role, WorkspaceMember.Role.OWNER)
 
+    def test_register_seeds_a_default_coworker(self):
+        """A first-time user should land with a usable coworker, not an empty
+        workspace that forces them through the create-coworker form."""
+        self.client.post(
+            reverse("auth-register"),
+            {"email": "seed@example.com", "password": VALID_PASSWORD, "display_name": "Seed"},
+        )
+        user = User.objects.get(email="seed@example.com")
+        workspace = Workspace.objects.get(owner=user)
+
+        coworkers = Coworker.objects.filter(workspace=workspace)
+        self.assertEqual(coworkers.count(), 1)
+        coworker = coworkers.get()
+        self.assertEqual(coworker.owner_type, Coworker.OwnerType.USER)
+        self.assertEqual(coworker.owner_id, user.id)
+        # Ready to use: an active version 1 with a concrete model binding.
+        self.assertIsNotNone(coworker.current_version)
+        self.assertEqual(coworker.current_version.version_number, 1)
+        self.assertEqual(coworker.current_version.model_binding, {"primary": "deepseek-v4-flash"})
+
     def test_register_duplicate_email_fails(self):
         User.objects.create_user(email="dup@example.com", password=VALID_PASSWORD)
         response = self.client.post(
@@ -52,6 +80,56 @@ class RegisterTests(APITestCase):
             reverse("auth-register"), {"email": "weak@example.com", "password": "123"}
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class DeleteAccountTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="del@example.com", password=VALID_PASSWORD, display_name="Del"
+        )
+        self.workspace = provision_personal_workspace(self.user)
+
+    def test_delete_removes_account_and_owned_data(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete(
+            reverse("me"), {"confirm_email": "del@example.com"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(id=self.user.id).exists())
+        # Owned workspace and everything cascaded under it is gone.
+        self.assertFalse(Workspace.objects.filter(id=self.workspace.id).exists())
+        self.assertEqual(Coworker.objects.filter(workspace=self.workspace).count(), 0)
+
+    def test_delete_confirmation_is_case_and_space_insensitive(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete(
+            reverse("me"), {"confirm_email": "  DEL@example.com "}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_delete_wrong_email_is_rejected(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete(
+            reverse("me"), {"confirm_email": "someone-else@example.com"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(User.objects.filter(id=self.user.id).exists())
+
+    def test_delete_missing_confirmation_is_rejected(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete(reverse("me"), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(User.objects.filter(id=self.user.id).exists())
+
+    def test_delete_requires_authentication(self):
+        response = self.client.delete(
+            reverse("me"), {"confirm_email": "del@example.com"}, format="json"
+        )
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+        self.assertTrue(User.objects.filter(id=self.user.id).exists())
 
 
 class LoginTests(APITestCase):
