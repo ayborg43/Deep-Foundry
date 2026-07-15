@@ -7,6 +7,7 @@ import { MenuIcon, XIcon, LogOutIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/app-sidebar";
+import { SectionTabs } from "@/components/section-tabs";
 import { NotificationBell } from "@/components/notification-bell";
 import { apiFetch } from "@/lib/api";
 import { clearTokens, getTokens, getWorkspaceId } from "@/lib/auth";
@@ -180,6 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Button>
           )}
         </header>
+        <SectionTabs />
         <main className="flex flex-1 flex-col">{children}</main>
       </div>
     </div>
