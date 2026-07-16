@@ -22,6 +22,44 @@ class TeamDesignError(Exception):
     """The model's proposal couldn't be parsed into a usable team spec."""
 
 
+# DeepSeek names tools loosely ("python", "search", ...); map the common
+# variants onto the platform's seeded tool names so an AI-designed coworker
+# gets working tools instead of an empty set (they're filtered against the real
+# catalog, and a bad name would otherwise silently drop).
+_TOOL_ALIASES = {
+    "code_interpreter": "execute_code", "code_execution": "execute_code",
+    "run_code": "execute_code", "python": "execute_code", "code": "execute_code",
+    "shell": "execute_code", "bash": "execute_code", "interpreter": "execute_code",
+    "search": "web_search", "web": "web_search", "web_browser": "web_search",
+    "browser": "web_search", "google": "web_search", "internet": "web_search",
+    "internet_search": "web_search", "web_browsing": "web_search", "browse": "web_search",
+    "read": "read_file", "file_read": "read_file", "read_files": "read_file",
+    "write": "write_file", "file_write": "write_file", "write_files": "write_file",
+    "email": "send_email", "mail": "send_email", "send_mail": "send_email",
+}
+# When the model leaves a coworker tool-less, give it these (approval-free)
+# defaults so it can still do useful work.
+_DEFAULT_SAFE_TOOLS = ("web_search", "read_file", "write_file")
+_CODE_HINTS = ("develop", "engineer", "test", "code", "program", "build")
+
+
+def _resolve_tools(raw_tools, tool_names, *, team_role, name, custom_label):
+    """Normalize the model's tool names to the real catalog; if nothing usable
+    survives, fall back to safe defaults (plus the sandbox for code roles)."""
+    resolved: list[str] = []
+    for raw in raw_tools:
+        canonical = _TOOL_ALIASES.get(str(raw).strip().lower(), str(raw).strip().lower())
+        if canonical in tool_names and canonical not in resolved:
+            resolved.append(canonical)
+    if resolved:
+        return resolved
+    defaults = [t for t in _DEFAULT_SAFE_TOOLS if t in tool_names]
+    hint = f"{team_role} {name} {custom_label}".lower()
+    if any(keyword in hint for keyword in _CODE_HINTS) and "execute_code" in tool_names:
+        defaults.append("execute_code")
+    return defaults
+
+
 _SYSTEM_PROMPT = """You design small teams of AI coworkers for a work platform.
 Given a description of a company or project, propose 2 to {max_size} coworkers.
 
@@ -95,7 +133,13 @@ def _sanitize(parsed: dict[str, Any], tool_names: set[str]) -> dict[str, Any]:
                 "team_role": team_role,
                 "custom_role_label": custom_label[:100],
                 "role_description": role_description,
-                "tools": [str(t) for t in raw_tools if str(t) in tool_names],
+                "tools": _resolve_tools(
+                    raw_tools,
+                    tool_names,
+                    team_role=team_role,
+                    name=name,
+                    custom_label=custom_label,
+                ),
             }
         )
     if not members:
