@@ -51,14 +51,18 @@ import type {
   CoworkerVersion,
   ModelBinding,
   ModelId,
+  PermissionProfile,
   Tool,
 } from "@/lib/types";
+
+const RISK_LEVELS = ["safe", "sensitive", "dangerous"] as const;
 
 type IdentitySnapshot = {
   name: string;
   avatarUrl: string;
   roleDescription: string;
   modelBinding: ModelBinding;
+  permissionProfile: PermissionProfile;
 };
 
 function bindingsEqual(a: ModelBinding, b: ModelBinding): boolean {
@@ -67,12 +71,17 @@ function bindingsEqual(a: ModelBinding, b: ModelBinding): boolean {
   return a.primary === b.primary && JSON.stringify(fa) === JSON.stringify(fb);
 }
 
+function permsEqual(a: PermissionProfile, b: PermissionProfile): boolean {
+  return RISK_LEVELS.every((level) => a[level] === b[level]);
+}
+
 function snapshotOf(coworker: Coworker): IdentitySnapshot {
   return {
     name: coworker.name,
     avatarUrl: coworker.avatar_url ?? "",
     roleDescription: coworker.role_description,
     modelBinding: coworker.model_binding,
+    permissionProfile: coworker.permission_profile,
   };
 }
 
@@ -92,6 +101,11 @@ export default function CoworkerDetailPage() {
   const [roleDescription, setRoleDescription] = useState("");
   const [primaryModel, setPrimaryModel] =
     useState<ModelId>("deepseek-v4-flash");
+  const [permProfile, setPermProfile] = useState<PermissionProfile>({
+    safe: "auto",
+    sensitive: "approval",
+    dangerous: "approval",
+  });
   const [changelog, setChangelog] = useState("");
   const [isSavingIdentity, setIsSavingIdentity] = useState(false);
   const [identityError, setIdentityError] = useState<string | null>(null);
@@ -129,6 +143,7 @@ export default function CoworkerDetailPage() {
     setAvatarUrl(snapshot.avatarUrl);
     setRoleDescription(snapshot.roleDescription);
     setPrimaryModel(snapshot.modelBinding.primary);
+    setPermProfile(snapshot.permissionProfile);
   }
 
   function loadVersions(coworkerId: string) {
@@ -177,12 +192,15 @@ export default function CoworkerDetailPage() {
   }, [id]);
 
   const currentBinding: ModelBinding = { primary: primaryModel };
+  const permsChanged = initial !== null && !permsEqual(permProfile, initial.permissionProfile);
+  const versionAffectingChange =
+    initial !== null &&
+    (roleDescription !== initial.roleDescription ||
+      !bindingsEqual(currentBinding, initial.modelBinding) ||
+      permsChanged);
   const hasIdentityChanges =
     initial !== null &&
-    (name !== initial.name ||
-      avatarUrl !== initial.avatarUrl ||
-      roleDescription !== initial.roleDescription ||
-      !bindingsEqual(currentBinding, initial.modelBinding));
+    (name !== initial.name || avatarUrl !== initial.avatarUrl || versionAffectingChange);
 
   async function handleSaveIdentity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -206,6 +224,9 @@ export default function CoworkerDetailPage() {
     if (bindingChanged) {
       body.model_binding = currentBinding;
     }
+    if (permsChanged) {
+      body.permission_profile = permProfile;
+    }
     if (changelog.trim()) {
       body.changelog = changelog.trim();
     }
@@ -224,7 +245,7 @@ export default function CoworkerDetailPage() {
       applyIdentity(updated);
       setChangelog("");
       setIdentitySaved(true);
-      if (bindingChanged || body.role_description) {
+      if (bindingChanged || body.role_description || permsChanged) {
         loadVersions(coworker.id);
       }
     } catch (err) {
@@ -547,8 +568,7 @@ export default function CoworkerDetailPage() {
               </p>
             </div>
 
-            {(roleDescription !== initial?.roleDescription ||
-              !bindingsEqual(currentBinding, initial?.modelBinding ?? currentBinding)) ? (
+            {versionAffectingChange ? (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="changelog">Changelog note (optional)</Label>
                 <Input
@@ -562,25 +582,44 @@ export default function CoworkerDetailPage() {
             ) : null}
 
             <div>
-              <p className="mb-1.5 text-sm font-medium">Permissions</p>
-              <dl className="grid grid-cols-3 gap-2 text-sm">
-                {(["safe", "sensitive", "dangerous"] as const).map((level) => (
-                  <div
-                    key={level}
-                    className="flex flex-col gap-0.5 rounded-lg border p-2"
-                  >
-                    <dt className="text-xs text-muted-foreground capitalize">
-                      {level}
-                    </dt>
-                    <dd className="text-xs font-medium capitalize">
-                      {coworker.permission_profile[level]}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+              <p className="mb-1.5 text-sm font-medium">Tool permissions</p>
+              <p className="mb-2.5 text-xs text-muted-foreground">
+                Whether this coworker runs a tool automatically or waits for your approval,
+                by risk level.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {RISK_LEVELS.map((level) => {
+                  const locked = level === "dangerous";
+                  return (
+                    <div key={level} className="flex flex-col gap-1.5 rounded-lg border p-2.5">
+                      <span className="text-xs font-medium capitalize text-muted-foreground">
+                        {level}
+                      </span>
+                      <Select
+                        value={permProfile[level]}
+                        disabled={locked}
+                        onValueChange={(value) => {
+                          setPermProfile((current) => ({
+                            ...current,
+                            [level]: value as "auto" | "approval",
+                          }));
+                          setIdentitySaved(false);
+                        }}
+                      >
+                        <SelectTrigger className="h-8 w-full" aria-label={`${level} tool policy`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {!locked ? <SelectItem value="auto">Automatic</SelectItem> : null}
+                          <SelectItem value="approval">Needs approval</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
+              </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Permission thresholds are fixed for now — editing lands in a
-                later milestone.
+                Dangerous tools always require approval and can&apos;t be automated.
               </p>
             </div>
           </CardContent>

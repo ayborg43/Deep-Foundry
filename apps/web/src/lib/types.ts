@@ -169,6 +169,16 @@ export type MarketplaceListing = {
   security_review?: { score: number; status: "passed" | "needs_review" | "failed"; findings: Array<{ severity: string; code: string; message: string }> };
 };
 
+export type ProjectResource = { resource_type: string; resource_id: string };
+
+export type Project = {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  resources?: ProjectResource[];
+};
+
 export type Integration = {
   id: string;
   kind: "email" | "calendar" | "slack" | "discord" | "github" | "webhook";

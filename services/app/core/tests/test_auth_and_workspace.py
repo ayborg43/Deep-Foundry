@@ -131,6 +131,72 @@ class DeleteAccountTests(APITestCase):
         )
         self.assertTrue(User.objects.filter(id=self.user.id).exists())
 
+    def test_delete_unwinds_protected_agent_team_run(self):
+        """A power user with an agent-team run has a PROTECT chain
+        (AgentTeamRun.version → AgentTeamVersion); deletion must unwind it
+        rather than raising ProtectedError."""
+        from core.coworkers import create_coworker
+        from core.models import AgentTeamRun, Coworker
+        from core.v2_services import create_agent_team, start_agent_team_run
+
+        binding = {"primary": "deepseek-v4-flash"}
+        manager = create_coworker(
+            workspace=self.workspace, owner=self.user, name="Mgr",
+            role_description="lead", model_binding=binding, created_by=self.user,
+        )
+        dev = create_coworker(
+            workspace=self.workspace, owner=self.user, name="Dev",
+            role_description="build", model_binding=binding, created_by=self.user,
+        )
+        team = create_agent_team(
+            workspace=self.workspace, user=self.user,
+            payload={
+                "name": "T", "collaboration_pattern": "manager_delegate",
+                "members": [
+                    {"coworker_id": str(manager.id), "role": "manager"},
+                    {"coworker_id": str(dev.id), "role": "developer"},
+                ],
+            },
+        )
+        start_agent_team_run(team, user=self.user, objective="ship it")
+        self.assertEqual(AgentTeamRun.objects.count(), 1)
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete(
+            reverse("me"), {"confirm_email": self.user.email}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(id=self.user.id).exists())
+        self.assertEqual(AgentTeamRun.objects.count(), 0)
+        self.assertEqual(Coworker.objects.filter(workspace=self.workspace).count(), 0)
+
+
+class BackfillDefaultCoworkersTests(APITestCase):
+    def test_seeds_only_coworker_less_workspaces(self):
+        from django.core.management import call_command
+
+        from core.models import Coworker
+
+        owner = User.objects.create_user(email="empty@example.com", password=VALID_PASSWORD)
+        empty = Workspace.objects.create(
+            name="Empty", type=Workspace.WorkspaceType.PERSONAL, owner=owner
+        )
+        WorkspaceMember.objects.create(
+            workspace=empty, user=owner, role=WorkspaceMember.Role.OWNER
+        )
+        # A separately-provisioned workspace already has its default coworker.
+        seeded = provision_personal_workspace(
+            User.objects.create_user(email="seeded@example.com", password=VALID_PASSWORD)
+        )
+
+        self.assertEqual(Coworker.objects.filter(workspace=empty).count(), 0)
+        call_command("backfill_default_coworkers")
+        self.assertEqual(Coworker.objects.filter(workspace=empty).count(), 1)
+        # Idempotent, and it didn't double up the already-seeded workspace.
+        call_command("backfill_default_coworkers")
+        self.assertEqual(Coworker.objects.filter(workspace=empty).count(), 1)
+        self.assertEqual(Coworker.objects.filter(workspace=seeded).count(), 1)
+
 
 class LoginTests(APITestCase):
     def setUp(self):

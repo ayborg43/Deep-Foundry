@@ -246,10 +246,26 @@ class CoworkerUpdateSerializer(serializers.Serializer):
     avatar_url = serializers.URLField(required=False, allow_null=True)
     role_description = serializers.CharField(required=False)
     model_binding = serializers.JSONField(required=False)
+    permission_profile = serializers.JSONField(required=False)
     changelog = serializers.CharField(required=False, allow_blank=True)
 
     def validate_model_binding(self, value: dict) -> dict:
         return validate_model_binding_value(value)
+
+    def validate_permission_profile(self, value: dict) -> dict:
+        if not isinstance(value, dict) or set(value) != {"safe", "sensitive", "dangerous"}:
+            raise serializers.ValidationError(
+                "Set a policy for each of safe, sensitive, and dangerous."
+            )
+        for level, policy in value.items():
+            if policy not in ("auto", "approval"):
+                raise serializers.ValidationError(f"{level} must be 'auto' or 'approval'.")
+        # SOUL.md §15.2 / SECURITY.md §4 — dangerous tools always need a human.
+        if value["dangerous"] == "auto":
+            raise serializers.ValidationError(
+                "Dangerous tools can never run automatically; they always need approval."
+            )
+        return value
 
     def validate(self, attrs: dict) -> dict:
         if not attrs:
