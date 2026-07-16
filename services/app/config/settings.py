@@ -182,6 +182,12 @@ WEB_SEARCH_MAX_RESPONSE_BYTES = int(
     os.environ.get("WEB_SEARCH_MAX_RESPONSE_BYTES", str(2 * 1024 * 1024))
 )
 
+# Instance-wide DeepSeek Cloud key. When set, it's the default for every
+# workspace that hasn't configured its own ProviderCredential — so a
+# self-hosted operator can supply one key for the whole deployment instead of
+# each workspace adding one. A workspace-specific credential still wins.
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+
 # Dedicated Docker-in-Docker sandbox. The host socket is never mounted; this
 # URL resolves only on Compose's private sandbox-control network.
 SANDBOX_DOCKER_URL = os.environ.get("SANDBOX_DOCKER_URL", "")
