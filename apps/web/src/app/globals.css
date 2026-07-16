@@ -58,6 +58,7 @@
  * changes.
  */
 :root {
+  color-scheme: light;                       /* native scrollbars/controls */
   --background: oklch(0.985 0.002 262);      /* cool near-white */
   --foreground: oklch(0.24 0.008 264);       /* cool near-black */
   --card: oklch(0.998 0.001 262);            /* near-white, faint cool */
@@ -97,6 +98,7 @@
 }
 
 .dark {
+  color-scheme: dark;                         /* native scrollbars/controls */
   /* Cool slate-black canvas, a hair-lighter card/composer surface, DeepSeek
    * blue accent. Blue is lightened for legibility on dark surfaces. */
   --background: oklch(0.185 0.008 262);       /* cool slate near-black */
