@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SectionTabs } from "@/components/section-tabs";
 import { NotificationBell } from "@/components/notification-bell";
 import { Wordmark } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { apiFetch } from "@/lib/api";
 import { clearTokens, getTokens, getWorkspaceId } from "@/lib/auth";
 import type { User, Workspace } from "@/lib/types";
@@ -124,7 +125,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/" aria-label="Deep-Foundry home">
               <Wordmark />
             </Link>
-            <nav className="flex items-center gap-1 text-sm">
+            <nav className="flex items-center gap-2 text-sm">
+              <ThemeToggle className="mr-1" />
               <Button asChild variant="ghost" size="sm">
                 <Link href="/login">Log in</Link>
               </Button>
@@ -142,7 +144,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const accountLabel = user?.display_name || user?.email?.split("@")[0] || "Account";
   const accountInitial = accountLabel.charAt(0).toUpperCase();
   const accountFooter = (
-    <div className="border-t border-sidebar-border p-2.5">
+    <div className="flex flex-col gap-2 border-t border-sidebar-border p-2.5">
+      <ThemeToggle />
       <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
           {accountInitial}
