@@ -160,6 +160,23 @@ class TeamDesignerUnitTests(APITestCase):
         managers = [m for m in spec["coworkers"] if m["team_role"] == "manager"]
         self.assertEqual(len(managers), 1)
 
+    def test_sanitize_normalizes_aliases_and_defaults_tools(self):
+        parsed = {
+            "team_name": "Eng",
+            "collaboration_pattern": "sequential",
+            "coworkers": [
+                {"name": "Dev", "team_role": "developer", "role_description": "You build.", "tools": ["python", "search"]},
+                {"name": "Helper", "team_role": "researcher", "role_description": "You help.", "tools": ["totally_unknown_tool"]},
+            ],
+        }
+        spec = _sanitize(parsed, TOOLS)
+        dev = spec["coworkers"][0]
+        # "python" -> execute_code, "search" -> web_search
+        self.assertEqual(set(dev["tools"]), {"execute_code", "web_search"})
+        helper = spec["coworkers"][1]
+        # All tool names unusable -> safe defaults (researcher gets no sandbox).
+        self.assertEqual(set(helper["tools"]), {"web_search", "read_file", "write_file"})
+
     def test_sanitize_rejects_empty_proposals(self):
         with self.assertRaises(TeamDesignError):
             _sanitize({"coworkers": []}, TOOLS)
