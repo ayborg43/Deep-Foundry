@@ -155,8 +155,12 @@ services:
     command: celery -A config worker --loglevel=info
     environment: *app_env
     depends_on:
+      # `started`, not `healthy`: on redeploy a slow app health check must not
+      # strand the recreate of its dependents (Traefik still gates traffic on
+      # app's own healthcheck). Fresh-boot migrations run in app's command; the
+      # DB schema persists across redeploys so an early dependent just retries.
       app:
-        condition: service_healthy
+        condition: service_started
     networks:
       - default
       - sandbox_control
@@ -167,8 +171,12 @@ services:
     command: celery -A config beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment: *app_env
     depends_on:
+      # `started`, not `healthy`: on redeploy a slow app health check must not
+      # strand the recreate of its dependents (Traefik still gates traffic on
+      # app's own healthcheck). Fresh-boot migrations run in app's command; the
+      # DB schema persists across redeploys so an early dependent just retries.
       app:
-        condition: service_healthy
+        condition: service_started
     networks:
       - default
       - sandbox_control
@@ -184,8 +192,12 @@ services:
     environment:
       INTERNAL_API_BASE_URL: http://app:8000
     depends_on:
+      # `started`, not `healthy`: on redeploy a slow app health check must not
+      # strand the recreate of its dependents (Traefik still gates traffic on
+      # app's own healthcheck). Fresh-boot migrations run in app's command; the
+      # DB schema persists across redeploys so an early dependent just retries.
       app:
-        condition: service_healthy
+        condition: service_started
     networks:
       - default
       - dokploy-network

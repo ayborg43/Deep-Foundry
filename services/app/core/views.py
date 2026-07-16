@@ -77,6 +77,51 @@ def _error(code: str, message: str, http_status: int, details: dict | None = Non
     )
 
 
+def _unwind_protected_rows(owned_ids: list) -> None:
+    """Delete the run/install/order rows whose PROTECT foreign keys would
+    otherwise block a workspace cascade from removing the version rows they
+    reference (Django resolves on_delete in Python, not the DB). Leaf-first:
+    a Payout protects its Order, so it goes before the Order; runs protect
+    their versions, so they go before the workspace deletes the versions.
+
+    Scoped to workspaces the user owns. A listing this user *published* that
+    other workspaces installed is deliberately left alone — vanishing a
+    dependency out from under other users would be the wrong call.
+    """
+    from django.db import connection
+
+    from core.models import (
+        AgentTeamRun,
+        AuditLog,
+        MarketplaceInstall,
+        MarketplaceOrder,
+        MarketplacePayout,
+        WorkflowRun,
+    )
+
+    # audit_log is append-only in normal operation (a DB trigger rejects
+    # UPDATE/DELETE). Deleting your account is an authorized erasure of your
+    # own data, so drop this account's audit rows with triggers suppressed at
+    # the session level — otherwise the workspace cascade can never remove them
+    # and the whole deletion fails. session_replication_role is used rather
+    # than ALTER TABLE DISABLE TRIGGER because the latter can't run once the
+    # table has pending trigger events inside the transaction.
+    with connection.cursor() as cursor:
+        cursor.execute("SET session_replication_role = 'replica'")
+        try:
+            AuditLog.objects.filter(workspace_id__in=owned_ids).delete()
+        finally:
+            cursor.execute("SET session_replication_role = 'origin'")
+
+    AgentTeamRun.objects.filter(agent_team__workspace_id__in=owned_ids).delete()
+    WorkflowRun.objects.filter(
+        workflow_version__workflow__workspace_id__in=owned_ids
+    ).delete()
+    MarketplacePayout.objects.filter(order__workspace_id__in=owned_ids).delete()
+    MarketplaceOrder.objects.filter(workspace_id__in=owned_ids).delete()
+    MarketplaceInstall.objects.filter(workspace_id__in=owned_ids).delete()
+
+
 def _personal_workspace_id(user: User) -> str | None:
     """Account-level events (login, MFA) aren't scoped to a workspace by the
     request. Most users have a PERSONAL workspace from registration
@@ -324,6 +369,7 @@ class MeView(generics.RetrieveUpdateDestroyAPIView):
                 Workspace.objects.filter(owner=user).values_list("id", flat=True)
             )
             if owned_ids:
+                _unwind_protected_rows(owned_ids)
                 Coworker.objects.filter(workspace_id__in=owned_ids).delete()
                 Workspace.objects.filter(id__in=owned_ids).delete()
             user.delete()
@@ -467,12 +513,28 @@ class CoworkerDetailView(APIView):
                 coworker.avatar_url = avatar_url
             coworker.save(update_fields=["name", "avatar_url", "updated_at"])
 
-        if "role_description" in data or "model_binding" in data:
+        # A permission change is applied as a fresh per-coworker profile rather
+        # than mutating the shared default (which other coworkers point at).
+        new_profile = None
+        if "permission_profile" in data:
+            from core.models import PermissionProfile
+
+            next_version = (
+                coworker.current_version.version_number if coworker.current_version else 0
+            ) + 1
+            new_profile = PermissionProfile.objects.create(
+                workspace=coworker.workspace,
+                name=f"{coworker.name} · v{next_version}",
+                default_tool_risk_policy=data["permission_profile"],
+            )
+
+        if "role_description" in data or "model_binding" in data or new_profile is not None:
             coworker_service.create_new_version(
                 coworker,
                 created_by=request.user,
                 role_description=data.get("role_description"),
                 model_binding=data.get("model_binding"),
+                permission_profile=new_profile,
                 changelog=data.get("changelog"),
             )
             coworker.refresh_from_db()

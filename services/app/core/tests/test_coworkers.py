@@ -65,6 +65,7 @@ class ToolCatalogTests(CoworkerTestBase):
                 "send_email", "create_calendar_event", "send_slack_message",
                 "send_discord_message", "create_github_issue", "send_webhook",
                 "create_presentation", "create_diagram", "record_video_analysis",
+                "propose_capability",
             },
         )
 
@@ -219,6 +220,26 @@ class CoworkerDetailTests(CoworkerTestBase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["model_binding"]["primary"], "deepseek-v4-pro")
         self.assertEqual(response.data["current_version"], 2)
+
+    def test_patch_permission_profile_creates_new_version(self):
+        created = self._create_coworker()
+        response = self.client.patch(
+            reverse("coworker-detail", kwargs={"coworker_id": created["id"]}),
+            {"permission_profile": {"safe": "approval", "sensitive": "approval", "dangerous": "approval"}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["current_version"], 2)
+        self.assertEqual(response.data["permission_profile"]["safe"], "approval")
+
+    def test_patch_permission_profile_dangerous_auto_rejected(self):
+        created = self._create_coworker()
+        response = self.client.patch(
+            reverse("coworker-detail", kwargs={"coworker_id": created["id"]}),
+            {"permission_profile": {"safe": "auto", "sensitive": "auto", "dangerous": "auto"}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_patch_empty_body_rejected(self):
         created = self._create_coworker()

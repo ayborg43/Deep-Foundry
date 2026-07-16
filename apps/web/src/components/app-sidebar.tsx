@@ -12,6 +12,7 @@ import {
   ListTodo,
   MessageSquare,
   Workflow,
+  FolderIcon,
   BookOpen,
   Store,
   Coins,
@@ -50,6 +51,7 @@ const PRIMARY: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: ListTodo, match: ["/approvals"] },
   { href: "/conversations", label: "Conversations", icon: MessageSquare },
   { href: "/knowledge", label: "Knowledge", icon: BookOpen, match: ["/memory", "/artifacts"] },
+  { href: "/projects", label: "Projects", icon: FolderIcon },
   { href: "/workflows", label: "Workflows", icon: Workflow },
   { href: "/marketplace", label: "Marketplace", icon: Store },
 ];

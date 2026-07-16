@@ -38,6 +38,7 @@ const TITLES: [string, string][] = [
   ["/knowledge", "Knowledge"],
   ["/memory", "Knowledge"],
   ["/artifacts", "Knowledge"],
+  ["/projects", "Projects"],
   ["/workflows", "Workflows"],
   ["/marketplace", "Marketplace"],
   ["/observability/usage", "Usage"],
