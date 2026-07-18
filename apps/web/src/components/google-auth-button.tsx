@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { getGoogleOAuthUrl } from "@/lib/google-oauth";
+import { cn } from "@/lib/utils";
 
-export function GoogleAuthButton() {
+export function GoogleAuthButton({ className }: { className?: string }) {
   // Computed on mount only (needs window.location) — null until then, and
   // stays null forever if NEXT_PUBLIC_GOOGLE_CLIENT_ID isn't set, in which
   // case the button hides itself rather than erroring.
@@ -24,7 +25,7 @@ export function GoogleAuthButton() {
   }
 
   return (
-    <Button asChild type="button" variant="outline" className="w-full">
+    <Button asChild type="button" variant="outline" className={cn("w-full", className)}>
       <a href={url}>Continue with Google</a>
     </Button>
   );

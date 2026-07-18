@@ -60,21 +60,21 @@ export function WorkspaceSwitcher() {
   const ActiveIcon = isOrg(active) ? Building2 : UserRound;
 
   return (
-    <div ref={ref} className="relative px-3 pb-2">
+    <div ref={ref} className="relative border-y border-sidebar-border px-3 py-2.5">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-2 text-left transition-colors hover:bg-sidebar-accent/70"
+        className="flex w-full items-center gap-2.5 rounded-[11px] border border-sidebar-border bg-card px-2 py-2 text-left shadow-[var(--shadow-sm)] transition-colors hover:border-input"
       >
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-primary/10 text-primary ring-1 ring-inset ring-primary/25">
           <ActiveIcon className="size-4" />
         </span>
         <span className="flex min-w-0 flex-col">
           <span className="truncate text-[0.8125rem] font-semibold leading-tight">{active.name}</span>
           <span className="truncate text-[0.6875rem] leading-tight text-muted-foreground">
-            {isOrg(active) ? "Organization" : "Personal"}
+            {isOrg(active) ? `${active.plan_tier || "Team"} plan` : "Personal workspace"}
           </span>
         </span>
         <ChevronsUpDown className="ml-auto size-3.5 shrink-0 text-muted-foreground" />

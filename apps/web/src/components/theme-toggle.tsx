@@ -11,18 +11,16 @@ const OPTIONS: { value: ThemePref; label: string; icon: LucideIcon }[] = [
   { value: "dark", label: "Dark", icon: MoonIcon },
 ];
 
-export function ThemeToggle({ className = "" }: { className?: string }) {
+// Shared: resolves the stored pref post-mount and keeps it synced while
+// following the OS. Both the segmented and icon variants need this.
+function useThemePref() {
   const [pref, setPref] = useState<ThemePref>("light");
 
-  // localStorage is client-only, so the real preference resolves post-mount.
-  // The theme itself is already correct (the inline script set it before
-  // paint); this only syncs which segment reads as active.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPref(getThemePref());
   }, []);
 
-  // While following the OS, re-apply when the OS theme flips under us.
   useEffect(() => {
     if (pref !== "system") return;
     const query = window.matchMedia("(prefers-color-scheme: dark)");
@@ -34,6 +32,35 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
   function choose(next: ThemePref) {
     setPref(next);
     applyThemePref(next);
+  }
+
+  return { pref, choose };
+}
+
+export function ThemeToggle({
+  className = "",
+  variant = "segmented",
+}: {
+  className?: string;
+  /** "segmented" (default): light/system/dark, three visible options.
+   *  "icon": a single button that toggles light ↔ dark. */
+  variant?: "segmented" | "icon";
+}) {
+  const { pref, choose } = useThemePref();
+
+  if (variant === "icon") {
+    const dark = isDark(pref);
+    return (
+      <button
+        type="button"
+        onClick={() => choose(dark ? "light" : "dark")}
+        aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+        title={dark ? "Switch to light theme" : "Switch to dark theme"}
+        className={`flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${className}`}
+      >
+        {dark ? <MoonIcon className="size-4" /> : <SunIcon className="size-4" />}
+      </button>
+    );
   }
 
   return (

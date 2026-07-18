@@ -4,22 +4,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { AuthShowcase } from "@/components/auth/auth-showcase";
 import { GoogleAuthButton } from "@/components/google-auth-button";
+import { LogoMark } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { setTokens } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import type { LoginResponse, Tokens } from "@/lib/types";
+
+// Sized up from the compact app-shell defaults (h-8/h-9) — this is a
+// once-per-session, front-door surface, not dense product chrome.
+const fieldClass = "h-11 rounded-xl px-3.5 text-base";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -85,126 +85,147 @@ export default function LoginPage() {
     }
   }
 
-  if (mfaToken) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
-        <Link href="/" className="flex flex-col items-center gap-1.5 text-center">
-          <span aria-hidden className="text-3xl leading-none text-primary">✳</span>
-          <span className="font-heading text-xl font-semibold tracking-tight">Deep-Foundry</span>
-        </Link>
-        <Card className="w-full max-w-sm shadow-xl shadow-foreground/5">
-          <CardHeader>
-            <CardTitle className="text-xl">Two-factor verification</CardTitle>
-            <CardDescription>
-              Enter the 6-digit code from your authenticator app.
-            </CardDescription>
-          </CardHeader>
-          <form onSubmit={handleMfaSubmit}>
-            <CardContent className="flex flex-col gap-4">
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="code">Authentication code</Label>
-                <Input
-                  id="code"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  required
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Verifying..." : "Verify"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => {
-                  setMfaToken(null);
-                  setCode("");
-                  setError(null);
-                }}
-              >
-                Back to login
-              </Button>
-            </CardContent>
-          </form>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-12">
-      <Link href="/" className="flex flex-col items-center gap-1.5 text-center">
-        <span aria-hidden className="text-3xl leading-none text-primary">✳</span>
-        <span className="font-heading text-xl font-semibold tracking-tight">Deep-Foundry</span>
-      </Link>
-      <Card className="w-full max-w-sm shadow-xl shadow-foreground/5">
-        <CardHeader>
-          <CardTitle className="text-xl">Welcome back</CardTitle>
-          <CardDescription>Log in to your Deep-Foundry workspace.</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleLoginSubmit}>
-          <CardContent className="flex flex-col gap-4">
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
+    <div className="grid min-h-screen lg:grid-cols-2">
+      <AuthShowcase />
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+      <div className="flex flex-col justify-center px-6 py-12 sm:px-10 md:px-16 lg:px-14 xl:px-20">
+        <div className="auth-panel-in mx-auto w-full max-w-sm">
+          <div className="mb-9 flex items-center justify-between">
+            <Link
+              href="/"
+              aria-label="Back to Deep-Foundry home"
+              className="flex items-center gap-2 opacity-90 transition-opacity hover:opacity-100"
+            >
+              <LogoMark />
+              <span className="font-heading text-[0.9375rem] font-semibold tracking-tight">
+                Deep-Foundry
+              </span>
+            </Link>
+            <ThemeToggle variant="icon" />
+          </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+          {mfaToken ? (
+            <>
+              <h1 className="font-heading text-[1.75rem] font-medium tracking-[-0.02em] text-balance">
+                Two-factor verification
+              </h1>
+              <p className="mt-1.5 text-[0.9375rem] text-muted-foreground">
+                Enter the 6-digit code from your authenticator app.
+              </p>
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Logging in..." : "Log in"}
-            </Button>
+              <form onSubmit={handleMfaSubmit} className="mt-7 flex flex-col gap-4">
+                {error ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                ) : null}
 
-            <div className="relative py-1 text-center text-xs text-muted-foreground">
-              <span className="relative bg-card px-2">or</span>
-              <div className="absolute inset-x-0 top-1/2 -z-10 border-t" />
-            </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="code">Authentication code</Label>
+                  <Input
+                    id="code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    required
+                    autoFocus
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className={cn(fieldClass, "text-center tracking-[0.3em]")}
+                  />
+                </div>
 
-            <GoogleAuthButton />
-          </CardContent>
-        </form>
-        <CardFooter className="justify-center text-sm text-muted-foreground">
-          Don&apos;t have an account?
-          <Link href="/signup" className="ml-1 font-medium text-foreground underline-offset-4 hover:underline">
-            Sign up
-          </Link>
-        </CardFooter>
-      </Card>
+                <Button type="submit" className="h-11 w-full rounded-xl text-base" disabled={isSubmitting}>
+                  {isSubmitting ? "Verifying…" : "Verify"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-11 w-full rounded-xl text-base"
+                  onClick={() => {
+                    setMfaToken(null);
+                    setCode("");
+                    setError(null);
+                  }}
+                >
+                  Back to login
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              <h1 className="font-heading text-[1.75rem] font-medium tracking-[-0.02em] text-balance">
+                Welcome back
+              </h1>
+              <p className="mt-1.5 text-[0.9375rem] text-muted-foreground">
+                Log in to your Deep-Foundry workspace.
+              </p>
+
+              <form onSubmit={handleLoginSubmit} className="mt-7 flex flex-col gap-4">
+                {error ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    autoFocus
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="mt-1 h-11 w-full rounded-xl text-base"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Logging in…" : "Log in"}
+                </Button>
+
+                <div className="relative py-1 text-center text-xs text-muted-foreground">
+                  <span className="relative bg-background px-2">or</span>
+                  <div className="absolute inset-x-0 top-1/2 -z-10 border-t" />
+                </div>
+
+                <GoogleAuthButton className="h-11 rounded-xl text-base" />
+              </form>
+
+              <p className="mt-8 text-center text-sm text-muted-foreground">
+                Don&apos;t have an account?{" "}
+                <Link
+                  href="/signup"
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Sign up
+                </Link>
+              </p>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

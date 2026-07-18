@@ -107,21 +107,15 @@ function NavRow({
         href={item.href}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
-        className={`group relative flex min-h-[2.125rem] items-center gap-2.5 rounded-md px-3 text-[0.8125rem] font-medium transition-colors ${
+        className={`group flex min-h-9 items-center gap-2.5 rounded-[9px] border px-2.5 text-[0.84375rem] font-medium transition-[background-color,border-color,color,box-shadow] ${
           active
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-            : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
+            ? "border-sidebar-border bg-card font-semibold text-foreground shadow-[var(--shadow-sm)]"
+            : "border-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         }`}
       >
-        {active ? (
-          <span
-            aria-hidden
-            className="absolute left-0 top-1/2 h-[18px] w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
-          />
-        ) : null}
         <Icon
           className={`size-4 shrink-0 transition-colors ${
-            active ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground/80"
+            active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
           }`}
         />
         <span className="truncate">{item.label}</span>
@@ -193,9 +187,10 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         href="/home"
         onClick={onNavigate}
         aria-label="Deep-Foundry home"
-        className="flex items-center px-4 pt-4 pb-3.5"
+        className="flex items-center gap-2.5 px-[18px] pb-3 pt-[18px]"
       >
         <Wordmark />
+        <span className="sr-only">Self-hosted instance</span>
       </Link>
 
       <WorkspaceSwitcher />
@@ -204,7 +199,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           href="/home"
           onClick={onNavigate}
-          className="flex min-h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-[0.8125rem] font-semibold text-primary-foreground shadow-[var(--shadow-sm)] transition-[background-color,box-shadow] hover:bg-[color-mix(in_oklch,var(--primary),black_10%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+          className="flex min-h-9 items-center justify-center gap-2 rounded-[9px] bg-foreground px-3 text-[0.8125rem] font-semibold text-background shadow-[var(--shadow-sm)] transition-[background-color,box-shadow] hover:bg-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
         >
           <PlusIcon className="size-4 shrink-0" />
           New task

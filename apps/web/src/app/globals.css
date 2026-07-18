@@ -7,11 +7,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-hanken-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
   /* One family across the product: headings share the UI sans, tuned by weight
    * and tracking rather than a separate display face (product register). */
-  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-hanken-grotesk), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -52,90 +52,90 @@
 
 /*
  * DeepSeek design language.
- * Cool-neutral surfaces (near-white / slate-black), DeepSeek brand blue accent
- * (#4D6BFE family), low-chroma cool grays. Values in oklch. Kept
+ * Warm paper and ink surfaces with the Foundry orange accent from the handoff.
+ * Kept
  * token-compatible with shadcn so every component reskins without markup
  * changes.
  */
 :root {
   color-scheme: light;                       /* native scrollbars/controls */
-  --background: oklch(0.985 0.002 262);      /* cool near-white */
-  --foreground: oklch(0.24 0.008 264);       /* cool near-black */
-  --card: oklch(0.998 0.001 262);            /* near-white, faint cool */
-  --card-foreground: oklch(0.24 0.008 264);
-  --popover: oklch(0.998 0.001 262);
-  --popover-foreground: oklch(0.24 0.008 264);
-  --primary: oklch(0.585 0.22 269);          /* DeepSeek blue #4D6BFE */
-  --primary-foreground: oklch(0.99 0.004 262);
-  --secondary: oklch(0.955 0.006 262);       /* deeper cool gray */
-  --secondary-foreground: oklch(0.3 0.008 264);
-  --muted: oklch(0.955 0.006 262);
-  --muted-foreground: oklch(0.55 0.015 264);
-  --accent: oklch(0.93 0.03 262);            /* soft blue tint for hover */
-  --accent-foreground: oklch(0.42 0.14 269);
-  --destructive: oklch(0.575 0.2 27);
-  --border: oklch(0.912 0.006 262);
-  --input: oklch(0.912 0.006 262);
-  --ring: oklch(0.585 0.22 269);
-  --chart-1: oklch(0.585 0.22 269);          /* DeepSeek blue */
-  --chart-2: oklch(0.7 0.13 230);            /* cyan-blue */
-  --chart-3: oklch(0.55 0.09 145);
-  --chart-4: oklch(0.62 0.16 300);           /* violet */
-  --chart-5: oklch(0.68 0.14 330);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.96 0.005 262);          /* slightly deeper than page */
-  --sidebar-foreground: oklch(0.24 0.008 264);
-  --sidebar-primary: oklch(0.585 0.22 269);
-  --sidebar-primary-foreground: oklch(0.99 0.004 262);
-  --sidebar-accent: oklch(0.925 0.008 262);  /* nav hover */
-  --sidebar-accent-foreground: oklch(0.3 0.008 264);
-  --sidebar-border: oklch(0.9 0.006 262);
-  --sidebar-ring: oklch(0.585 0.22 269);
+  --background: #f6f4f0;
+  --foreground: #1d1b17;
+  --card: #ffffff;
+  --card-foreground: #1d1b17;
+  --popover: #ffffff;
+  --popover-foreground: #1d1b17;
+  --primary: #c2410c;
+  --primary-foreground: #ffffff;
+  --secondary: #efede8;
+  --secondary-foreground: #211f1b;
+  --muted: #efede8;
+  --muted-foreground: #59554d;
+  --accent: #efede8;
+  --accent-foreground: #211f1b;
+  --destructive: #d65a4a;
+  --border: #e7e3db;
+  --input: #d8d3c9;
+  --ring: #3b82c4;
+  --chart-1: #c2410c;
+  --chart-2: #0e8a88;
+  --chart-3: #3f7d3c;
+  --chart-4: #2f6fb0;
+  --chart-5: #8a4f7d;
+  --radius: 0.6875rem;
+  --sidebar: #fbfaf7;
+  --sidebar-foreground: #1d1b17;
+  --sidebar-primary: #c2410c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #efede8;
+  --sidebar-accent-foreground: #211f1b;
+  --sidebar-border: #e7e3db;
+  --sidebar-ring: #3b82c4;
   /* Cohesive elevation scale — cool-tinted, soft. Used via shadow-[var(--…)]. */
-  --shadow-sm: 0 1px 2px 0 oklch(0.3 0.03 264 / 0.06);
-  --shadow-md: 0 4px 14px -3px oklch(0.3 0.03 264 / 0.1), 0 2px 4px -2px oklch(0.3 0.03 264 / 0.06);
-  --shadow-lg: 0 14px 36px -10px oklch(0.28 0.03 264 / 0.18), 0 4px 10px -4px oklch(0.28 0.03 264 / 0.08);
+  --shadow-sm: 0 1px 2px rgb(29 27 23 / 0.06);
+  --shadow-md: 0 8px 24px -12px rgb(29 27 23 / 0.18), 0 2px 5px rgb(29 27 23 / 0.06);
+  --shadow-lg: 0 20px 60px -18px rgb(29 27 23 / 0.26);
 }
 
 .dark {
   color-scheme: dark;                         /* native scrollbars/controls */
   /* Cool slate-black canvas, a hair-lighter card/composer surface, DeepSeek
    * blue accent. Blue is lightened for legibility on dark surfaces. */
-  --background: oklch(0.185 0.008 262);       /* cool slate near-black */
-  --foreground: oklch(0.95 0.004 262);        /* cool off-white */
-  --card: oklch(0.232 0.008 262);            /* composer / raised surface */
-  --card-foreground: oklch(0.95 0.004 262);
-  --popover: oklch(0.225 0.008 262);
-  --popover-foreground: oklch(0.95 0.004 262);
-  --primary: oklch(0.66 0.19 269);           /* DeepSeek blue, lifted */
-  --primary-foreground: oklch(0.99 0.01 262);
-  --secondary: oklch(0.285 0.008 262);
-  --secondary-foreground: oklch(0.95 0.004 262);
-  --muted: oklch(0.285 0.008 262);
-  --muted-foreground: oklch(0.71 0.01 262);
-  --accent: oklch(0.31 0.02 262);
-  --accent-foreground: oklch(0.95 0.004 262);
-  --destructive: oklch(0.7 0.18 25);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.66 0.19 269);
-  --chart-1: oklch(0.66 0.19 269);
-  --chart-2: oklch(0.72 0.12 230);
-  --chart-3: oklch(0.65 0.09 145);
-  --chart-4: oklch(0.68 0.15 300);
-  --chart-5: oklch(0.72 0.13 330);
-  --sidebar: oklch(0.165 0.008 262);         /* slightly deeper than canvas */
-  --sidebar-foreground: oklch(0.95 0.004 262);
-  --sidebar-primary: oklch(0.66 0.19 269);
-  --sidebar-primary-foreground: oklch(0.99 0.01 262);
-  --sidebar-accent: oklch(0.28 0.012 262);
-  --sidebar-accent-foreground: oklch(0.95 0.004 262);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.66 0.19 269);
+  --background: #131210;
+  --foreground: #f1eee7;
+  --card: #1b1a17;
+  --card-foreground: #f1eee7;
+  --popover: #1b1a17;
+  --popover-foreground: #f1eee7;
+  --primary: #ea7c48;
+  --primary-foreground: #1a1815;
+  --secondary: #211f1b;
+  --secondary-foreground: #f1eee7;
+  --muted: #211f1b;
+  --muted-foreground: #aba69c;
+  --accent: #211f1b;
+  --accent-foreground: #f1eee7;
+  --destructive: #e36c5c;
+  --border: #2c2a25;
+  --input: #3b3830;
+  --ring: #5b9bd8;
+  --chart-1: #ea7c48;
+  --chart-2: #36aaa7;
+  --chart-3: #69a864;
+  --chart-4: #6f9ed1;
+  --chart-5: #b77aaa;
+  --sidebar: #211f1b;
+  --sidebar-foreground: #f1eee7;
+  --sidebar-primary: #ea7c48;
+  --sidebar-primary-foreground: #1a1815;
+  --sidebar-accent: #2c2a25;
+  --sidebar-accent-foreground: #f1eee7;
+  --sidebar-border: #2c2a25;
+  --sidebar-ring: #5b9bd8;
   /* Deeper, near-black shadows read correctly on the dark canvas. */
-  --shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.4);
-  --shadow-md: 0 6px 20px -4px oklch(0 0 0 / 0.5), 0 2px 6px -2px oklch(0 0 0 / 0.4);
-  --shadow-lg: 0 18px 44px -12px oklch(0 0 0 / 0.62), 0 6px 14px -6px oklch(0 0 0 / 0.45);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.42);
+  --shadow-md: 0 8px 24px -10px rgb(0 0 0 / 0.62);
+  --shadow-lg: 0 22px 64px -16px rgb(0 0 0 / 0.72);
 }
 
 @layer base {
@@ -144,21 +144,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Faint DeepSeek-blue blooms give surfaces depth instead of flat color.
-     * Fixed so they stay put while content scrolls; subtle in both themes. */
-    background-image:
-      radial-gradient(
-        48rem 48rem at 12% -8%,
-        color-mix(in oklch, var(--primary) 6%, transparent),
-        transparent 60%
-      ),
-      radial-gradient(
-        42rem 42rem at 105% 4%,
-        color-mix(in oklch, var(--primary) 5%, transparent),
-        transparent 55%
-      );
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
@@ -173,5 +159,104 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer utilities {
+  .fd-scroll {
+    scrollbar-color: var(--input) transparent;
+    scrollbar-width: thin;
+  }
+
+  .fd-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .fd-scroll::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: var(--input);
+    background-clip: content-box;
+  }
+}
+
+/* Ambient motion for the auth showcase panel (src/components/auth/auth-showcase.tsx).
+ * Each node/line gets its own duration + delay (set inline) so the network
+ * drifts organically instead of pulsing in lockstep. Collapsed by the
+ * prefers-reduced-motion rule above like every other animation on the site. */
+@keyframes node-float {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(4px, -6px); }
+}
+@keyframes line-pulse {
+  0%, 100% { stroke-opacity: 0.12; }
+  50% { stroke-opacity: 0.4; }
+}
+.auth-network-node {
+  animation: node-float ease-in-out infinite;
+}
+.auth-network-line {
+  animation: line-pulse ease-in-out infinite;
+}
+
+/* One staggered entrance for the auth form column — runs once on mount, no
+ * scroll trigger, content is present at 0% so it never ships blank. */
+@keyframes auth-panel-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.auth-panel-in {
+  animation: auth-panel-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Scroll-reveal for the marketing landing (src/components/marketing/reveal.tsx).
+ * Progressive enhancement: the hidden start state is gated behind the `js`
+ * class (added before first paint by the init script in layout.tsx), so with
+ * no JS — or a headless renderer that never runs the observer — content ships
+ * fully visible. The Reveal component flips `data-shown` when the element
+ * enters view. Reduced motion collapses to an instant appearance. */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(1.25rem);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.js [data-reveal][data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* Slow drift for the hero's floating accent chips — gives the product mock a
+ * sense of depth without demanding attention. Each chip sets its own delay. */
+@keyframes chip-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.chip-float {
+  animation: chip-float 6s ease-in-out infinite;
+}
+
+/* Marquee for the trust strip — a seamless, ownerless loop of the two copies. */
+@keyframes marquee-x {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  animation: marquee-x 32s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chip-float,
+  .marquee-track {
+    animation: none !important;
   }
 }
