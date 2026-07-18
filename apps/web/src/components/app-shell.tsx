@@ -15,10 +15,16 @@ import { apiFetch } from "@/lib/api";
 import { clearTokens, getTokens, getWorkspaceId } from "@/lib/auth";
 import type { User, Workspace } from "@/lib/types";
 
-// Routes that render without the app chrome (marketing + auth).
-function isPublicRoute(pathname: string): boolean {
+// The marketing home gets the slim topbar (logo + Log in / Get started nav).
+function isMarketingRoute(pathname: string): boolean {
+  return pathname === "/";
+}
+
+// Auth pages own their entire viewport — no shared nav. They already carry
+// their own logo/theme-toggle, and a "Log in" link makes no sense while
+// already on /login (same for "Get started" on /signup).
+function isAuthRoute(pathname: string): boolean {
   return (
-    pathname === "/" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
     pathname.startsWith("/auth")
@@ -117,24 +123,49 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Public / auth pages: a slim centered top bar, no sidebar.
-  if (isPublicRoute(pathname)) {
+  // Auth pages render full-bleed with no shared chrome at all.
+  if (isAuthRoute(pathname)) {
+    return <>{children}</>;
+  }
+
+  // Marketing home: a sticky, translucent top bar over the landing content.
+  if (isMarketingRoute(pathname)) {
     return (
       <div className="flex min-h-full flex-col">
-        <header className="border-b border-border/70">
-          <div className="mx-auto flex min-h-14 max-w-6xl items-center justify-between gap-3 px-4">
-            <Link href="/" aria-label="Deep-Foundry home">
+        <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+            <Link href="/" aria-label="Deep-Foundry home" className="shrink-0">
               <Wordmark />
             </Link>
-            <nav className="flex items-center gap-2 text-sm">
-              <ThemeToggle className="mr-1" />
-              <Button asChild variant="ghost" size="sm">
+            <nav className="hidden items-center gap-1 md:flex">
+              <a
+                href="#how-it-works"
+                className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                How it works
+              </a>
+              <a
+                href="#capabilities"
+                className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Capabilities
+              </a>
+              <a
+                href="#control"
+                className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Control
+              </a>
+            </nav>
+            <div className="flex items-center gap-1.5">
+              <ThemeToggle variant="icon" />
+              <Button asChild variant="ghost" className="h-9 px-3">
                 <Link href="/login">Log in</Link>
               </Button>
-              <Button asChild size="sm">
+              <Button asChild className="h-9 px-4">
                 <Link href="/signup">Get started</Link>
               </Button>
-            </nav>
+            </div>
           </div>
         </header>
         <main className="flex flex-1 flex-col">{children}</main>
@@ -171,9 +202,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // App pages: fixed sidebar (desktop) + slide-over (mobile) + topbar.
   return (
-    <div className="flex min-h-full">
+    <div className="flex h-svh overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-svh w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+      <aside className="hidden h-svh w-[266px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
         <AppSidebar />
         {isAuthed ? accountFooter : null}
       </aside>
@@ -200,8 +231,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       {/* Main column */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-1.5 border-b border-border/70 bg-background/80 px-3 backdrop-blur-md sm:px-4">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="z-30 flex min-h-14 items-center gap-1.5 border-b border-border bg-background px-3 lg:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -233,7 +264,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </header>
         <SectionTabs />
-        <main className="flex flex-1 flex-col">{children}</main>
+        <main className="fd-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</main>
       </div>
     </div>
   );

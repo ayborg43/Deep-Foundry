@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 // Deep-Foundry brand mark. A small "constellation" — one lead node linked to
 // three coworkers — nods to the product (agents + teams) without being literal.
 // Self-contained SVG so it stays crisp at any size and needs no asset pipeline.
-// The tile carries the DeepSeek-blue primary; the glyph is the tile foreground.
+// The handoff's warm foundry line sits inside a high-contrast ink tile.
 export function LogoMark({ className }: { className?: string }) {
   return (
     <svg
@@ -12,24 +12,15 @@ export function LogoMark({ className }: { className?: string }) {
       aria-label="Deep-Foundry"
       className={cn("size-7 shrink-0", className)}
     >
-      <rect width="32" height="32" rx="8" className="fill-primary" />
-      <g
-        className="stroke-primary-foreground"
-        strokeWidth="1.75"
+      <rect width="32" height="32" rx="8" className="fill-foreground" />
+      <path
+        d="M6.5 25 11 10.5l5.2 8.1L20 7l5.5 18"
+        className="stroke-primary"
+        strokeWidth="2.35"
         strokeLinecap="round"
+        strokeLinejoin="round"
         fill="none"
-      >
-        {/* links from the lead node to each coworker node */}
-        <path d="M16 15.5 L9.5 10" />
-        <path d="M16 15.5 L23 11" />
-        <path d="M16 15.5 L15.5 23" />
-      </g>
-      <g className="fill-primary-foreground">
-        <circle cx="16" cy="15.5" r="3" />
-        <circle cx="9.5" cy="10" r="2" />
-        <circle cx="23" cy="11" r="2" />
-        <circle cx="15.5" cy="23" r="2" />
-      </g>
+      />
     </svg>
   );
 }

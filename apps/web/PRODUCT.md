@@ -10,17 +10,17 @@ Stripe, claude.ai. The bar is **earned familiarity** — trusted, not surprising
 
 ## Users & scene
 Operators and builders working in a focused, authenticated app, often for long
-sessions, frequently at night. Dark-first UI (the app ships `dark` on `<html>`).
+sessions. The warm light theme is the default and dark mode is fully paired.
 Density is welcome where it earns its keep (task lists, tables, settings).
 
 ## Design language (existing, keep)
-- **Color:** DeepSeek blue `#4D6BFE` family as the single accent (primary actions,
-  current selection, state). Cool near-neutral surfaces, low chroma. OKLCH tokens
-  in `src/app/globals.css`, shadcn-compatible so components reskin without markup.
+- **Color:** Foundry orange `#C2410C` is the single accent for selection and
+  emphasis. Warm paper, white surfaces, and ink form the light theme; dark mode
+  uses warm near-black surfaces with a lifted orange. Tokens remain shadcn-compatible.
   Strategy: **Restrained** (accent ≤ ~10% of surface).
-- **Type:** Geist Sans for all UI (one family, tuned weights). Geist Mono for code.
+- **Type:** Hanken Grotesk for UI and headings. JetBrains Mono for code and data.
   No serif in product chrome.
-- **Radius:** `--radius: 0.75rem` base, scaled tokens.
+- **Radius:** `--radius: 0.6875rem` base, scaled tokens.
 - **Motion:** 150–250ms, conveys state only. Respect `prefers-reduced-motion`.
 
 ## Non-negotiables
