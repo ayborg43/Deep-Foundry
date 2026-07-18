@@ -76,11 +76,11 @@
   --destructive: #d65a4a;
   --border: #e7e3db;
   --input: #d8d3c9;
-  --ring: #3b82c4;
+  --ring: #9a3412;
   --chart-1: #c2410c;
   --chart-2: #0e8a88;
   --chart-3: #3f7d3c;
-  --chart-4: #2f6fb0;
+  --chart-4: #b07a1e;
   --chart-5: #8a4f7d;
   --radius: 0.6875rem;
   --sidebar: #fbfaf7;
@@ -90,7 +90,7 @@
   --sidebar-accent: #efede8;
   --sidebar-accent-foreground: #211f1b;
   --sidebar-border: #e7e3db;
-  --sidebar-ring: #3b82c4;
+  --sidebar-ring: #9a3412;
   /* Cohesive elevation scale — cool-tinted, soft. Used via shadow-[var(--…)]. */
   --shadow-sm: 0 1px 2px rgb(29 27 23 / 0.06);
   --shadow-md: 0 8px 24px -12px rgb(29 27 23 / 0.18), 0 2px 5px rgb(29 27 23 / 0.06);
@@ -99,8 +99,7 @@
 
 .dark {
   color-scheme: dark;                         /* native scrollbars/controls */
-  /* Cool slate-black canvas, a hair-lighter card/composer surface, DeepSeek
-   * blue accent. Blue is lightened for legibility on dark surfaces. */
+  /* Warm near-black canvas with a lifted Foundry orange accent. */
   --background: #131210;
   --foreground: #f1eee7;
   --card: #1b1a17;
@@ -118,11 +117,11 @@
   --destructive: #e36c5c;
   --border: #2c2a25;
   --input: #3b3830;
-  --ring: #5b9bd8;
+  --ring: #f4956a;
   --chart-1: #ea7c48;
   --chart-2: #36aaa7;
   --chart-3: #69a864;
-  --chart-4: #6f9ed1;
+  --chart-4: #d4a64a;
   --chart-5: #b77aaa;
   --sidebar: #211f1b;
   --sidebar-foreground: #f1eee7;
@@ -131,7 +130,7 @@
   --sidebar-accent: #2c2a25;
   --sidebar-accent-foreground: #f1eee7;
   --sidebar-border: #2c2a25;
-  --sidebar-ring: #5b9bd8;
+  --sidebar-ring: #f4956a;
   /* Deeper, near-black shadows read correctly on the dark canvas. */
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.42);
   --shadow-md: 0 8px 24px -10px rgb(0 0 0 / 0.62);

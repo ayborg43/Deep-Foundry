@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 // Ambient "coworker network" that sits behind the hero — the same constellation
 // motif as the auth showcase and logo mark, widened for a landscape hero and
-// tinted with the DeepSeek-blue primary so it reads in both themes. Purely
+// tinted with the Foundry-orange primary so it reads in both themes. Purely
 // decorative. Reuses the node-float / line-pulse keyframes (globals.css).
 const NODES = [
   { x: 150, y: 150, r: 3 },

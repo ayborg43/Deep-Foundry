@@ -55,7 +55,7 @@ export default function Home() {
     <div className="flex flex-1 flex-col">
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
-        {/* Ambient constellation + blue bloom behind the hero */}
+        {/* Ambient constellation + warm orange bloom behind the hero */}
         <NetworkBackdrop className="pointer-events-none absolute inset-0 -z-10 h-full w-full opacity-[0.18] [mask-image:radial-gradient(120%_100%_at_70%_20%,black,transparent_75%)]" />
         <div
           className="pointer-events-none absolute -top-32 right-[-10%] -z-10 size-[42rem] rounded-full opacity-60 blur-3xl"

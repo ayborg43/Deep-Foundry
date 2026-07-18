@@ -51,7 +51,7 @@ const FEATURES = [
 ];
 
 // The brand "front door" panel shared by /login and /signup. Deliberately
-// drenched dark + DeepSeek blue regardless of the site's light/dark
+// drenched dark + Foundry orange regardless of the site's light/dark
 // preference — the showcase is a fixed brand moment, not themed chrome.
 export function AuthShowcase() {
   return (

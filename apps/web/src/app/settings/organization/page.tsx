@@ -45,7 +45,7 @@ const ROLES = [
   { value: "guest", label: "Guest", hint: "Limited, invite-only access." },
 ] as const;
 
-const ACCENTS = ["#0E8A88", "#C24C68", "#2F6FB0", "#3F7D3C", "#8A4F7D", "#B07A1E"];
+const ACCENTS = ["#0E8A88", "#C24C68", "#7C5C3E", "#3F7D3C", "#8A4F7D", "#B07A1E"];
 
 function roleLabel(role: string) {
   return ROLES.find((item) => item.value === role)?.label ?? role.replace(/_/g, " ");
