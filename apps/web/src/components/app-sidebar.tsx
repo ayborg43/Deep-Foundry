@@ -30,11 +30,13 @@ import {
   ChevronDown,
 } from "lucide-react";
 
+import { CoworkerStatusGlyph } from "@/components/coworker-status";
 import { Wordmark } from "@/components/logo";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { apiFetch } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
-import type { Conversation } from "@/lib/types";
+import { useCoworkerStatuses } from "@/lib/coworker-status";
+import type { Conversation, Coworker } from "@/lib/types";
 
 // `match` lists extra path prefixes that should keep this item highlighted —
 // e.g. Coworkers stays active on /agent-teams because Teams is now a sub-tab
@@ -166,17 +168,27 @@ function CollapsibleGroup({
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const [recents, setRecents] = useState<Conversation[]>([]);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [coworkers, setCoworkers] = useState<Coworker[]>([]);
+  const statuses = useCoworkerStatuses(workspaceId, 30_000);
 
   useEffect(() => {
     if (!getTokens()) return;
     void (async () => {
       const id = await getWorkspaceId();
       if (!id) return;
+      setWorkspaceId(id);
       try {
         const convs = await apiFetch<Conversation[]>(`/conversations?workspace_id=${id}`);
         setRecents(convs.slice(0, 6));
       } catch {
         // Recents are supplementary; the section just stays hidden.
+      }
+      try {
+        const roster = await apiFetch<Coworker[]>(`/workspaces/${id}/coworkers`);
+        setCoworkers(roster.slice(0, 8));
+      } catch {
+        // Same: the coworkers section just stays hidden.
       }
     })();
   }, [pathname]);
@@ -221,6 +233,56 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
             onNavigate={onNavigate}
           />
         ))}
+
+        {coworkers.length > 0 ? (
+          <div className="mt-4">
+            <p className="px-3 pb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              Your coworkers
+            </p>
+            <ul className="grid gap-0.5">
+              {coworkers.map((coworker) => {
+                const active =
+                  pathname === `/coworkers/${coworker.id}` ||
+                  pathname.startsWith(`/coworkers/${coworker.id}/`);
+                const status = statuses.get(coworker.id);
+                return (
+                  <li key={coworker.id}>
+                    <Link
+                      href={`/coworkers/${coworker.id}`}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
+                      title={status?.detail || undefined}
+                      className={`group flex min-h-8 items-center gap-2.5 rounded-md px-3 text-[0.8125rem] transition-colors ${
+                        active
+                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                          : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
+                      }`}
+                    >
+                      {coworker.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={coworker.avatar_url}
+                          alt=""
+                          className="size-4 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[9px] font-semibold uppercase text-muted-foreground">
+                          {coworker.name.slice(0, 1)}
+                        </span>
+                      )}
+                      <span className="truncate">{coworker.name}</span>
+                      {status ? (
+                        <span className="ml-auto flex shrink-0 items-center">
+                          <CoworkerStatusGlyph state={status.state} className="size-3.5" />
+                        </span>
+                      ) : null}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
 
         {recents.length > 0 ? (
           <div className="mt-4">

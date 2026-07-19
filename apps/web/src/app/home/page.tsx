@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { PlusIcon, MicIcon, ArrowUpIcon, BellIcon, ChevronRightIcon, InboxIcon, Wand2Icon } from "lucide-react";
+import { AlertTriangleIcon, PlusIcon, MicIcon, ArrowUpIcon, BellIcon, ChevronRightIcon, InboxIcon, Wand2Icon } from "lucide-react";
 
+import { ApprovalPolicyDialog } from "@/components/approval-policy-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
+import { useCoworkerStatuses } from "@/lib/coworker-status";
 import { RISK_BADGE_CLASS, RISK_LABELS } from "@/lib/coworkers";
 import type { ApprovalRequestData, BackgroundTask, Coworker, User } from "@/lib/types";
 
@@ -21,6 +23,13 @@ const IDEAS = [
 ];
 
 const RISK_ORDER: Record<string, number> = { dangerous: 0, sensitive: 1, safe: 2 };
+
+type ApprovalStats = {
+  pending: number;
+  pending_dangerous: number;
+  executed_today: number;
+  auto_executed_today: number;
+};
 
 const RISK_EDGE: Record<string, string> = {
   dangerous: "border-l-destructive",
@@ -64,9 +73,13 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequestData[]>([]);
+  const [approvalStats, setApprovalStats] = useState<ApprovalStats | null>(null);
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [policyItem, setPolicyItem] = useState<ApprovalRequestData | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const statuses = useCoworkerStatuses(workspaceId, 20_000);
 
   useEffect(() => {
     if (!getTokens()) {
@@ -98,6 +111,13 @@ export default function HomePage() {
             );
           } catch {
             // The queue degrades to the plain launcher; /approvals still has everything.
+          }
+          try {
+            setApprovalStats(
+              await apiFetch<ApprovalStats>(`/workspaces/${id}/approval-requests/stats`)
+            );
+          } catch {
+            // Tiles just don't render without stats.
           }
         };
         await loadApprovals();
@@ -180,6 +200,55 @@ export default function HomePage() {
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const hasQueue = queue.length > 0;
+  const activeIndex = Math.min(selectedIndex, Math.max(0, queue.length - 1));
+
+  // Refs so the one-time keydown listener always sees the current queue
+  // and selection without re-binding on every render.
+  const queueRef = useRef(queue);
+  const activeIndexRef = useRef(activeIndex);
+  const decideRef = useRef(decideApproval);
+  useEffect(() => {
+    queueRef.current = queue;
+    activeIndexRef.current = activeIndex;
+    decideRef.current = decideApproval;
+  });
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || queueRef.current.length === 0) return;
+      const key = e.key.toLowerCase();
+      if (key === "j") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.min(i + 1, queueRef.current.length - 1));
+      } else if (key === "k") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.max(i - 1, 0));
+      } else if (key === "a" || key === "d") {
+        e.preventDefault();
+        const item = queueRef.current[activeIndexRef.current];
+        if (item) void decideRef.current(item, key === "a");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const item = queue[activeIndex];
+    if (item) {
+      document
+        .getElementById(`approval-${item.id}`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex]);
 
   const composer = (
     <>
@@ -251,18 +320,72 @@ export default function HomePage() {
   if (hasQueue) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-4 py-10">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
-            {greeting()}{name ? `, ${name}` : ""}
-          </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Your coworkers need{" "}
-            <span className="font-medium text-foreground">
-              {queue.length} {queue.length === 1 ? "decision" : "decisions"}
-            </span>{" "}
-            before they can continue. Review each action below.
-          </p>
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
+              {greeting()}{name ? `, ${name}` : ""}
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Your coworkers need{" "}
+              <span className="font-medium text-foreground">
+                {queue.length} {queue.length === 1 ? "decision" : "decisions"}
+              </span>{" "}
+              before they can continue. Review each action below.
+            </p>
+          </div>
+          <div className="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
+            Navigate
+            <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">J</kbd>
+            <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">K</kbd>
+            <span className="mx-0.5">·</span>
+            <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">A</kbd>
+            approve
+            <span className="mx-0.5">·</span>
+            <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">D</kbd>
+            deny
+          </div>
         </header>
+
+        <section aria-label="Decision stats" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground">Pending</p>
+            <p className="text-2xl font-semibold">{queue.length}</p>
+          </div>
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="flex items-center gap-1 text-xs text-destructive">
+              <AlertTriangleIcon className="size-3" />
+              Dangerous
+            </p>
+            <p className="text-2xl font-semibold">
+              {queue.filter((item) => item.tool_risk_classification === "dangerous").length}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground">Auto-approved today</p>
+            <p className="text-2xl font-semibold">
+              {approvalStats ? approvalStats.auto_executed_today : "—"}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground">Coworkers active</p>
+            <p className="text-2xl font-semibold">
+              {statuses.size > 0 ? (
+                <>
+                  {
+                    [...statuses.values()].filter(
+                      (s) => s.state === "working" || s.state === "needs_approval"
+                    ).length
+                  }
+                  <span className="text-sm font-normal text-muted-foreground">
+                    /{statuses.size}
+                  </span>
+                </>
+              ) : (
+                "—"
+              )}
+            </p>
+          </div>
+        </section>
 
         <section aria-label="Approval queue" className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between">
@@ -274,7 +397,7 @@ export default function HomePage() {
 
           {approvalError ? <p className="text-sm text-destructive">{approvalError}</p> : null}
 
-          {queue.map((item) => {
+          {queue.map((item, index) => {
             const risk = item.tool_risk_classification;
             const actor = item.coworker_name ?? "Coworker";
             const args = compactArgs(item.requested_action.arguments);
@@ -286,8 +409,10 @@ export default function HomePage() {
             return (
               <article
                 key={item.id}
+                id={`approval-${item.id}`}
+                onMouseEnter={() => setSelectedIndex(index)}
                 aria-label={`${actor} wants to run ${item.tool_name}`}
-                className={`flex flex-col gap-3 rounded-xl border border-l-2 bg-card p-4 ${RISK_EDGE[risk ?? ""] ?? "border-l-border"}`}
+                className={`flex flex-col gap-3 rounded-xl border border-l-2 bg-card p-4 ${RISK_EDGE[risk ?? ""] ?? "border-l-border"}${index === activeIndex ? " ring-2 ring-primary/30" : ""}`}
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="font-medium">{actor}</span>
@@ -302,6 +427,16 @@ export default function HomePage() {
                   <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                     {timeAgo(item.created_at)}
                   </span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <p className="font-heading font-medium">
+                    {item.summary || `${actor} wants to run ${item.tool_name}`}
+                  </p>
+                  {item.rationale ? (
+                    <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                      {item.rationale}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="rounded-lg bg-muted/60 px-3 py-2 font-mono text-xs">
                   <span className="text-muted-foreground">$ </span>
@@ -330,6 +465,13 @@ export default function HomePage() {
                   >
                     Deny
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => setPolicyItem(item)}
+                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Always allow…
+                  </button>
                   {chatHref ? (
                     <Link
                       href={chatHref}
@@ -346,6 +488,19 @@ export default function HomePage() {
         </section>
 
         <div>{composer}</div>
+
+        {policyItem && workspaceId ? (
+          <ApprovalPolicyDialog
+            open={policyItem !== null}
+            onOpenChange={(open) => !open && setPolicyItem(null)}
+            workspaceId={workspaceId}
+            coworkerId={policyItem.coworker_id}
+            coworkerName={policyItem.coworker_name ?? "this coworker"}
+            toolId={policyItem.tool_id}
+            toolName={policyItem.tool_name}
+            args={policyItem.requested_action.arguments ?? {}}
+          />
+        ) : null}
       </div>
     );
   }

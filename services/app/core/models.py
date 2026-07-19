@@ -372,6 +372,12 @@ class ApprovalRequest(UUIDPrimaryKeyModel):
     )
     tool = models.ForeignKey(Tool, on_delete=models.CASCADE, related_name="approval_requests")
     requested_action = models.JSONField(default=dict, blank=True)
+    # Coworker-supplied plain-English headline ("Refund $214.00 across 3
+    # Stripe charges") and justification for the approval surfaces. Both are
+    # best-effort: blank whenever generation wasn't possible, and every UI
+    # must fall back to tool_name + requested_action.
+    summary = models.TextField(blank=True, default="")
+    rationale = models.TextField(blank=True, default="")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     decided_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
@@ -384,6 +390,52 @@ class ApprovalRequest(UUIDPrimaryKeyModel):
 
     def __str__(self) -> str:
         return f"{self.tool.name} for {self.coworker_id} ({self.status})"
+
+
+class ApprovalPolicy(UUIDPrimaryKeyModel):
+    """A standing "always allow" rule a human creates from an approval
+    decision ("Always allow refunds under $250"): auto-approves a tool for
+    one coworker — or any coworker when coworker is null — instead of
+    asking every time. Optionally conditioned on one numeric argument
+    staying at or under a threshold; a policy with a condition matches
+    fail-closed (missing or non-numeric argument means no match).
+
+    Org policy floors always win: enforcement consults policies only when
+    no organization floor forces approval for the tool's risk tier, so a
+    workspace member cannot use a policy to bypass governance.
+    """
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="approval_policies"
+    )
+    coworker = models.ForeignKey(
+        Coworker,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="approval_policies",
+    )
+    tool = models.ForeignKey(Tool, on_delete=models.CASCADE, related_name="approval_policies")
+    # Dot-path into the tool-call arguments (e.g. "amount" or
+    # "refund.total"); set together with max_amount, or both empty for a
+    # blanket allow.
+    argument_path = models.CharField(max_length=255, blank=True, default="")
+    max_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    enabled = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "approval_policies"
+
+    def __str__(self) -> str:
+        scope = self.coworker_id or "any coworker"
+        condition = (
+            f"{self.argument_path} <= {self.max_amount}" if self.argument_path else "always"
+        )
+        return f"allow {self.tool.name} for {scope} ({condition})"
 
 
 class AuditLog(UUIDPrimaryKeyModel):

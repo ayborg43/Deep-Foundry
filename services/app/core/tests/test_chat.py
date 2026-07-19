@@ -6,10 +6,12 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from ai.model_router.adapters.deepseek_cloud import DeepSeekCloudAdapter
+from ai.model_router.errors import AdapterError
 from ai.models import Conversation, ConversationParticipant, Message
 from core.coworkers import create_coworker
 from core.encryption import encrypt_to_bytes
 from core.models import (
+    ApprovalPolicy,
     ApprovalRequest,
     AuditLog,
     PermissionProfile,
@@ -112,6 +114,17 @@ class ChatTestBase(APITestCase):
         CoworkerToolAttachment.objects.create(
             coworker=self.coworker, tool=Tool.objects.get(name="execute_code"), enabled=True
         )
+        # Approval-summary generation makes a non-streaming _post call after
+        # a tool is gated. Fail it fast by default — summaries degrade to
+        # blank — so no test here can reach the live API; tests asserting
+        # summaries override this patch with a scripted response.
+        post_patcher = patch.object(
+            DeepSeekCloudAdapter,
+            "_post",
+            side_effect=AdapterError("no non-streaming calls in tests"),
+        )
+        post_patcher.start()
+        self.addCleanup(post_patcher.stop)
         self._auth_as(self.owner)
 
     def _auth_as(self, user, password=VALID_PASSWORD):
@@ -389,3 +402,52 @@ class MessagePatchRegenerateTests(ChatTestBase):
         self.assertEqual(original.content, "First answer")
         new_message = Message.objects.get(content="Second answer")
         self.assertEqual(new_message.parent_message_id, original.id)
+
+
+class ApprovalPolicyApiTests(ChatTestBase):
+    def _policies_url(self) -> str:
+        return f"/api/v1/workspaces/{self.workspace.id}/approval-policies"
+
+    def test_create_list_delete_policy(self):
+        tool = Tool.objects.get(name="execute_code")
+        created = self.client.post(
+            self._policies_url(),
+            {
+                "tool_id": str(tool.id),
+                "coworker_id": str(self.coworker.id),
+                "argument_path": "amount",
+                "max_amount": "250",
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data["tool_name"], "execute_code")
+        self.assertEqual(created.data["max_amount"], "250")
+
+        listed = self.client.get(self._policies_url())
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(len(listed.data), 1)
+
+        deleted = self.client.delete(f"/api/v1/approval-policies/{created.data['id']}")
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(ApprovalPolicy.objects.exists())
+        self.assertTrue(
+            AuditLog.objects.filter(action="approval_policy.created").exists()
+        )
+        self.assertTrue(
+            AuditLog.objects.filter(action="approval_policy.deleted").exists()
+        )
+
+    def test_condition_requires_both_path_and_amount(self):
+        tool = Tool.objects.get(name="execute_code")
+        response = self.client.post(
+            self._policies_url(),
+            {"tool_id": str(tool.id), "argument_path": "amount"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_stranger_cannot_list_policies(self):
+        self._auth_as(self.stranger)
+        response = self.client.get(self._policies_url())
+        self.assertIn(response.status_code, (403, 404))

@@ -8,6 +8,7 @@ which is where the approval gate actually lives (SECURITY.md §4).
 """
 
 import json
+from decimal import Decimal, InvalidOperation
 
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
@@ -34,7 +35,7 @@ from core.interface import (
     get_approval_request,
     write_audit_log,
 )
-from core.models import ApprovalRequest
+from core.models import ApprovalPolicy, ApprovalRequest, AuditLog, Coworker, Tool
 from core.permissions import get_coworker_for_member, get_workspace_for_member
 from core.serializers import ApprovalRequestSerializer
 
@@ -236,6 +237,130 @@ class ApprovalRequestListView(generics.ListAPIView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         return queryset.order_by("-created_at")
+
+
+class ApprovalRequestStatsView(APIView):
+    """GET /workspaces/{workspace_id}/approval-requests/stats — the counts
+    behind the home page's decision tiles. "Auto-approved today" is derived,
+    not stored: tool.executed audit rows minus approvals a human granted
+    today, since an approved-then-executed call also writes tool.executed."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, workspace_id: str) -> Response:
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        today_start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+        pending = ApprovalRequest.objects.filter(
+            coworker__workspace=workspace, status=ApprovalRequest.Status.PENDING
+        )
+        executed_today = AuditLog.objects.filter(
+            workspace=workspace, action="tool.executed", created_at__gte=today_start
+        ).count()
+        approved_today = ApprovalRequest.objects.filter(
+            coworker__workspace=workspace,
+            status=ApprovalRequest.Status.APPROVED,
+            decided_at__gte=today_start,
+        ).count()
+        return Response(
+            {
+                "pending": pending.count(),
+                "pending_dangerous": pending.filter(
+                    tool__risk_classification=Tool.RiskClassification.DANGEROUS
+                ).count(),
+                "executed_today": executed_today,
+                "auto_executed_today": max(0, executed_today - approved_today),
+            }
+        )
+
+
+def _policy_data(policy: ApprovalPolicy) -> dict:
+    return {
+        "id": str(policy.id),
+        "tool_id": str(policy.tool_id),
+        "tool_name": policy.tool.name,
+        "tool_risk_classification": policy.tool.risk_classification,
+        "coworker_id": str(policy.coworker_id) if policy.coworker_id else None,
+        "coworker_name": policy.coworker.name if policy.coworker_id else None,
+        "argument_path": policy.argument_path,
+        "max_amount": str(policy.max_amount) if policy.max_amount is not None else None,
+        "created_at": policy.created_at,
+    }
+
+
+class ApprovalPolicyListCreateView(APIView):
+    """GET/POST /workspaces/{workspace_id}/approval-policies — standing
+    "always allow" rules, created from the shortcut on approval cards."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, workspace_id: str) -> Response:
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        rows = (
+            ApprovalPolicy.objects.filter(workspace=workspace, enabled=True)
+            .select_related("tool", "coworker")
+            .order_by("-created_at")
+        )
+        return Response([_policy_data(row) for row in rows])
+
+    def post(self, request: Request, workspace_id: str) -> Response:
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        tool = get_object_or_404(Tool, id=request.data.get("tool_id"))
+        coworker = None
+        if request.data.get("coworker_id"):
+            coworker = get_object_or_404(
+                Coworker, id=request.data["coworker_id"], workspace=workspace
+            )
+        argument_path = str(request.data.get("argument_path") or "").strip()
+        max_amount_raw = request.data.get("max_amount")
+        if bool(argument_path) != (max_amount_raw is not None):
+            raise ValidationError(
+                "argument_path and max_amount must be provided together (or neither, "
+                "for a blanket allow)."
+            )
+        max_amount = None
+        if max_amount_raw is not None:
+            try:
+                max_amount = Decimal(str(max_amount_raw))
+            except InvalidOperation as exc:
+                raise ValidationError({"max_amount": "Must be a number."}) from exc
+        policy = ApprovalPolicy.objects.create(
+            workspace=workspace,
+            coworker=coworker,
+            tool=tool,
+            argument_path=argument_path,
+            max_amount=max_amount,
+            created_by=request.user,
+        )
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id,
+            action="approval_policy.created", resource_type="approval_policy",
+            resource_id=policy.id, workspace_id=workspace.id,
+            metadata={
+                "tool_name": tool.name,
+                "coworker_id": str(coworker.id) if coworker else None,
+                "argument_path": argument_path,
+                "max_amount": str(max_amount) if max_amount is not None else None,
+            },
+        )
+        return Response(_policy_data(policy), status=status.HTTP_201_CREATED)
+
+
+class ApprovalPolicyDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, policy_id: str) -> Response:
+        policy = get_object_or_404(
+            ApprovalPolicy.objects.select_related("tool"), id=policy_id
+        )
+        get_workspace_for_member(request.user, policy.workspace_id)
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id,
+            action="approval_policy.deleted", resource_type="approval_policy",
+            resource_id=policy.id, workspace_id=policy.workspace_id,
+            metadata={"tool_name": policy.tool.name},
+        )
+        policy.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _decide_approval_request(

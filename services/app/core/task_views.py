@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -10,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ai.models import Conversation, ConversationParticipant
+from ai.models import Conversation, ConversationParticipant, Message
 from core.interface import decide_approval_request, write_audit_log
 from core.models import ApprovalRequest, Coworker, Notification, Task
 from core.permissions import get_coworker_for_member, get_workspace_for_member
@@ -163,3 +165,113 @@ class NotificationReadView(APIView):
             notification.read_at = timezone.now()
             notification.save(update_fields=["read_at"])
         return Response(NotificationSerializer(notification).data)
+
+
+# How long a blocked/failed task keeps coloring its coworker's status, and
+# how long an in-flight streamed message counts as "working". Stale failures
+# shouldn't paint a coworker red forever.
+_STATUS_ATTENTION_WINDOW = timedelta(hours=24)
+_STATUS_STREAMING_WINDOW = timedelta(minutes=10)
+
+
+class CoworkerStatusListView(APIView):
+    """GET /workspaces/{workspace_id}/coworkers/status — live status per
+    coworker, fully derived: nothing is stored, so the status can never
+    drift from the approvals, tasks, and messages that produce it.
+
+    Precedence per coworker:
+    needs_approval > blocked > error > working > idle.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, workspace_id: str) -> Response:
+        workspace = get_workspace_for_member(request.user, workspace_id)
+        now = timezone.now()
+        coworkers = list(
+            Coworker.objects.filter(
+                workspace=workspace, status=Coworker.Status.ACTIVE
+            ).values("id", "name")
+        )
+        coworker_ids = [row["id"] for row in coworkers]
+
+        # Latest pending approval per coworker (iterated newest-first, so
+        # the first one seen per coworker wins).
+        pending_approval_by_coworker: dict = {}
+        for approval in (
+            ApprovalRequest.objects.filter(
+                coworker_id__in=coworker_ids, status=ApprovalRequest.Status.PENDING
+            )
+            .select_related("tool")
+            .order_by("-created_at")
+        ):
+            pending_approval_by_coworker.setdefault(
+                approval.coworker_id,
+                approval.summary or f"Wants to run {approval.tool.name}",
+            )
+
+        # Recent tasks, grouped per coworker into: active (running), needing
+        # attention (blocked/failed recently), and last completed.
+        active_by_coworker: dict = {}
+        attention_by_coworker: dict = {}
+        last_completed_by_coworker: dict = {}
+        recent_tasks = Task.objects.filter(
+            workspace=workspace, coworker_id__in=coworker_ids
+        ).order_by("-updated_at")[:300]
+        for task in recent_tasks:
+            key = task.coworker_id
+            if task.status in (Task.Status.PENDING, Task.Status.IN_PROGRESS):
+                active_by_coworker.setdefault(key, task)
+            elif (
+                task.status in (Task.Status.BLOCKED, Task.Status.FAILED)
+                and now - task.updated_at <= _STATUS_ATTENTION_WINDOW
+            ):
+                attention_by_coworker.setdefault(key, task)
+            elif task.status == Task.Status.COMPLETED:
+                last_completed_by_coworker.setdefault(key, task)
+
+        # A coworker mid-stream in a conversation is working even with no
+        # background task running.
+        streaming_ids = set(
+            Message.objects.filter(
+                sender_type=Message.SenderType.COWORKER,
+                sender_id__in=coworker_ids,
+                status__in=(Message.Status.PENDING, Message.Status.STREAMING),
+                created_at__gte=now - _STATUS_STREAMING_WINDOW,
+            ).values_list("sender_id", flat=True)
+        )
+
+        payload = []
+        for row in coworkers:
+            coworker_id = row["id"]
+            active = active_by_coworker.get(coworker_id)
+            attention = attention_by_coworker.get(coworker_id)
+            completed = last_completed_by_coworker.get(coworker_id)
+
+            if coworker_id in pending_approval_by_coworker:
+                state = "needs_approval"
+                detail = pending_approval_by_coworker[coworker_id]
+            elif attention is not None:
+                state = "blocked" if attention.status == Task.Status.BLOCKED else "error"
+                detail = attention.error_message or attention.title
+            elif active is not None:
+                state = "working"
+                detail = active.title
+            elif coworker_id in streaming_ids:
+                state = "working"
+                detail = "In a live conversation"
+            else:
+                state = "idle"
+                detail = ""
+
+            payload.append(
+                {
+                    "coworker_id": str(coworker_id),
+                    "name": row["name"],
+                    "state": state,
+                    "detail": detail,
+                    "last_run_at": completed.completed_at if completed else None,
+                    "last_run_title": completed.title if completed else None,
+                }
+            )
+        return Response(payload)

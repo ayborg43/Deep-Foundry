@@ -141,6 +141,13 @@ def _listing_data(listing: MarketplaceListing, *, detail: bool = False) -> dict:
         "price_usd": str(listing.price_usd) if listing.price_usd is not None else None,
         "verified_publisher": listing.verified_publisher,
         "publisher_workspace_id": str(listing.publisher_workspace_id),
+        "publisher_name": listing.publisher_workspace.name,
+        # Job-domain category and tool scopes, declared by the publisher in
+        # the manifest — null/empty for listings that predate the fields.
+        # declared_tools is in the LIST payload on purpose: "every listing
+        # shows what it can touch before you install".
+        "category": latest.manifest.get("category") if latest else None,
+        "declared_tools": latest.manifest.get("declared_tools", []) if latest else [],
         "latest_version": latest.version_string if latest else None,
         "install_count": listing.versions.aggregate(total=Count("installs"))["total"],
         "review_count": reviews["count"], "rating": reviews["rating"],
@@ -497,7 +504,7 @@ class MarketplaceListingListCreateView(APIView):
         rows = MarketplaceListing.objects.filter(
             visibility=MarketplaceListing.Visibility.PUBLIC,
             versions__review_status=MarketplaceListingVersion.ReviewStatus.APPROVED,
-        ).distinct()
+        ).select_related("publisher_workspace").distinct()
         if request.query_params.get("type"):
             rows = rows.filter(listing_type=request.query_params["type"])
         if request.query_params.get("query"):

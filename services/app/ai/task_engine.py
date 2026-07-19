@@ -10,6 +10,7 @@ import json
 from typing import Any
 from uuid import UUID
 
+from ai.chat_orchestrator import summarize_approval
 from ai.knowledge import search_coworker_knowledge
 from ai.memory import search_memory, write_memory
 from ai.model_router.factory import build_model_router
@@ -26,6 +27,7 @@ from core.interface import (
     get_provider_credential,
     notify_workspace,
     report_task_status,
+    resolve_approval_policy,
     resolve_org_action_policy,
     write_audit_log,
 )
@@ -187,7 +189,39 @@ def execute_background_task(task_id: UUID | str) -> None:
                     )
                     if org_decision == "require_approval":
                         permission_decision = "approval"
+                    elif permission_decision == "approval" and approval is None:
+                        # Standing "always allow" consent — same guardrails
+                        # as the chat orchestrator: never overrides an org
+                        # floor or org action policy.
+                        floor_forces = (config.org_policy_floor or {}).get(
+                            tool.risk_classification, "auto"
+                        ) != "auto"
+                        if not floor_forces:
+                            policy_id = resolve_approval_policy(
+                                workspace_id=task.workspace_id,
+                                coworker_id=task.coworker_id,
+                                tool_id=tool.id,
+                                arguments=call.arguments,
+                            )
+                            if policy_id is not None:
+                                permission_decision = "auto"
+                                write_audit_log(
+                                    actor_type="coworker", actor_id=task.coworker_id,
+                                    action="tool.policy_auto_approved", resource_type="tool",
+                                    resource_id=tool.id, workspace_id=task.workspace_id,
+                                    metadata={
+                                        "tool_call_id": call.id,
+                                        "approval_policy_id": str(policy_id),
+                                    },
+                                )
                     if approval is None and permission_decision == "approval":
+                        summary, rationale = summarize_approval(
+                            router,
+                            config.model_binding.get("primary", "deepseek-v4-flash"),
+                            call.name,
+                            call.arguments,
+                            unresolved.content,
+                        )
                         approval = create_approval_request(
                             coworker_id=task.coworker_id,
                             tool_id=tool.id,
@@ -197,6 +231,8 @@ def execute_background_task(task_id: UUID | str) -> None:
                                 "name": call.name,
                                 "arguments": call.arguments,
                             },
+                            summary=summary,
+                            rationale=rationale,
                         )
                         state = {**task.execution_state, "messages": [_serialize_message(m) for m in messages]}
                         report_task_status(task.id, "needs_approval", execution_state=state)

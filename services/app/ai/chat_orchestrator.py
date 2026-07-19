@@ -43,7 +43,9 @@ from core.interface import (
     get_attached_tools,
     get_coworker_config,
     get_provider_credential,
+    resolve_approval_policy,
     resolve_org_action_policy,
+    set_approval_request_summary,
     write_audit_log,
 )
 from core.permissions import resolve_tool_permission
@@ -53,6 +55,48 @@ from core.permissions import resolve_tool_permission
 # single request looping forever, not against a coworker calling tools
 # across many separate turns.
 MAX_TOOL_ITERATIONS = 5
+
+_APPROVAL_SUMMARY_PROMPT = (
+    "You summarize a pending tool action for a human approval queue. Reply with "
+    "one short imperative headline (under 100 characters) stating the concrete "
+    "action and its key numbers, e.g. 'Refund $214.00 across 3 Stripe charges'. "
+    "No quotes, no trailing period, nothing else."
+)
+
+
+def summarize_approval(
+    router: ModelRouter,
+    model_id: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+    assistant_content: str,
+) -> tuple[str, str]:
+    """Best-effort (summary, rationale) for an approval request. The
+    rationale is the coworker's own words from the message that requested
+    the call; the summary is one extra non-streaming model call. Any
+    failure degrades to blank — approval surfaces always fall back to
+    tool_name + requested_action, so nothing here may ever raise."""
+    rationale = " ".join((assistant_content or "").split())
+    if len(rationale) > 280:
+        rationale = rationale[:277] + "..."
+    try:
+        response = router.generate(
+            [
+                ChatMessage(role="system", content=_APPROVAL_SUMMARY_PROMPT),
+                ChatMessage(
+                    role="user",
+                    content=json.dumps({"tool": tool_name, "arguments": arguments}),
+                ),
+            ],
+            [],
+            ModelConfig(model_id=model_id, temperature=0.0, max_tokens=60),
+        )
+        summary = " ".join((response.content or "").split()).strip('"')
+        if len(summary) > 140:
+            summary = summary[:137] + "..."
+    except Exception:  # noqa: BLE001 — summary is decorative, never fatal
+        summary = ""
+    return summary, rationale
 
 
 @dataclass(frozen=True)
@@ -190,6 +234,7 @@ def _continue_turn(
                 coworker_config=coworker_config,
                 workspace_id=workspace_id,
                 coworker_id=coworker_id,
+                router=router,
             )
             if _has_unresolved_tool_calls(unresolved):
                 return  # still blocked on at least one pending approval
@@ -262,6 +307,7 @@ def _continue_turn(
             coworker_config=coworker_config,
             workspace_id=workspace_id,
             coworker_id=coworker_id,
+            router=router,
         )
         if _has_unresolved_tool_calls(assistant_message):
             return  # blocked on approval
@@ -324,6 +370,7 @@ def _advance_message_tool_calls(
     coworker_config: ResolvedCoworkerConfig,
     workspace_id: UUID | str,
     coworker_id: UUID | str,
+    router: ModelRouter | None = None,
 ) -> Iterator[ChatEvent]:
     """Walks the assistant message's stored tool_calls in order, resolving
     whichever prefix is resolvable right now. Idempotent by construction: a
@@ -347,6 +394,27 @@ def _advance_message_tool_calls(
         if outcome is None:
             continue  # already resolved by this call or a concurrent one
         events, stop = outcome
+        # A freshly created approval request gets its human-readable
+        # headline here, after _resolve_one_tool_call's transaction has
+        # committed — the summary is a model call and must never run while
+        # the assistant_message row lock is held.
+        approval_event = next((e for e in events if e.event == "approval_required"), None)
+        if approval_event is not None and router is not None:
+            summary, rationale = summarize_approval(
+                router,
+                coworker_config.model_binding.get("primary", "deepseek-v4-flash"),
+                raw["name"],
+                raw["arguments"],
+                assistant_message.content,
+            )
+            if summary or rationale:
+                set_approval_request_summary(
+                    approval_event.data["approval_request_id"],
+                    summary=summary,
+                    rationale=rationale,
+                )
+                approval_event.data["summary"] = summary
+                approval_event.data["rationale"] = rationale
         yield from events
         if stop:
             return
@@ -428,6 +496,34 @@ def _resolve_one_tool_call(
         )
         if org_decision == "require_approval":
             decision = "approval"
+        elif decision == "approval":
+            # A member-created "always allow" policy is standing human
+            # consent — equivalent to clicking Approve in advance. It may
+            # override the default gate, but never org governance: this
+            # branch is unreachable when the org action policy forced
+            # approval, and the floor check below keeps floor-forced
+            # approvals gated too.
+            floor_forces = (coworker_config.org_policy_floor or {}).get(
+                tool_info.risk_classification, "auto"
+            ) != "auto"
+            if not floor_forces:
+                policy_id = resolve_approval_policy(
+                    workspace_id=workspace_id,
+                    coworker_id=coworker_id,
+                    tool_id=tool_info.id,
+                    arguments=arguments,
+                )
+                if policy_id is not None:
+                    decision = "auto"
+                    write_audit_log(
+                        actor_type="coworker", actor_id=coworker_id,
+                        action="tool.policy_auto_approved", resource_type="tool",
+                        resource_id=tool_info.id, workspace_id=workspace_id,
+                        metadata={
+                            "tool_call_id": tool_call_id,
+                            "approval_policy_id": str(policy_id),
+                        },
+                    )
         if decision == "approval":
             requested_action = {
                 "tool_call_id": tool_call_id, "name": tool_name, "arguments": arguments
@@ -453,6 +549,10 @@ def _resolve_one_tool_call(
                     "tool_name": tool_name,
                     "arguments": arguments,
                     "message_id": str(assistant_message.id),
+                    # Filled in by _advance_message_tool_calls after this
+                    # transaction commits (summary generation is a model call).
+                    "summary": "",
+                    "rationale": "",
                 },
             )
             return [event], True  # stop; wait for a decision

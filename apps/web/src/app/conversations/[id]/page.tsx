@@ -19,12 +19,14 @@ import {
   XIcon,
 } from "lucide-react";
 
+import { ApprovalPolicyDialog } from "@/components/approval-policy-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens } from "@/lib/auth";
+import { COWORKER_STATUS_META, useCoworkerStatuses } from "@/lib/coworker-status";
 import {
   approveRequest,
   denyRequest,
@@ -61,6 +63,8 @@ type PendingApproval = {
   messageId: string | null;
   toolName: string;
   arguments: Record<string, unknown>;
+  summary: string;
+  rationale: string;
 };
 
 function riskOf(toolsByName: Map<string, Tool>, name: string): RiskClassification | null {
@@ -156,17 +160,23 @@ function ApprovalCard({
   toolName,
   args,
   risk,
+  summary,
+  rationale,
   isDeciding,
   onApprove,
   onDeny,
+  onAlwaysAllow,
 }: {
   coworkerName: string;
   toolName: string;
   args: Record<string, unknown>;
   risk: RiskClassification | null;
+  summary?: string;
+  rationale?: string;
   isDeciding: boolean;
   onApprove: () => void;
   onDeny: () => void;
+  onAlwaysAllow?: () => void;
 }) {
   return (
     <div
@@ -182,8 +192,11 @@ function ApprovalCard({
         ) : null}
       </div>
       <p className="font-heading font-semibold">
-        {coworkerName} wants to run {toolName}
+        {summary || `${coworkerName} wants to run ${toolName}`}
       </p>
+      {rationale ? (
+        <p className="text-xs leading-relaxed text-muted-foreground">{rationale}</p>
+      ) : null}
       <div
         className="flex flex-col gap-0.5 rounded-lg bg-background/70 px-3 py-2 font-mono text-xs"
         tabIndex={0}
@@ -214,6 +227,15 @@ function ApprovalCard({
           <XIcon data-icon="inline-start" />
           Deny
         </Button>
+        {onAlwaysAllow ? (
+          <button
+            type="button"
+            onClick={onAlwaysAllow}
+            className="ml-auto text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Always allow {toolName} →
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -244,6 +266,8 @@ export default function ConversationPage() {
   const [isListening, setIsListening] = useState(false);
   const [memories, setMemories] = useState<MemoryEntry[] | null>(null);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[] | null>(null);
+  const statuses = useCoworkerStatuses(conversation?.workspace_id ?? null, 30_000);
+  const [policyDialogOpen, setPolicyDialogOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -340,6 +364,8 @@ export default function ConversationPage() {
             messageId: mine.message_id,
             toolName: mine.tool_name,
             arguments: mine.requested_action.arguments ?? {},
+            summary: mine.summary ?? "",
+            rationale: mine.rationale ?? "",
           });
         }
       } catch (err) {
@@ -423,6 +449,8 @@ export default function ConversationPage() {
         messageId: event.data.message_id,
         toolName: event.data.tool_name,
         arguments: event.data.arguments,
+        summary: event.data.summary ?? "",
+        rationale: event.data.rationale ?? "",
       });
       setIsSending(false);
     } else if (event.event === "message_complete") {
@@ -531,9 +559,12 @@ export default function ConversationPage() {
           toolName={call.name}
           args={call.arguments}
           risk={riskOf(toolsByName, call.name)}
+          summary={pendingApproval?.summary}
+          rationale={pendingApproval?.rationale}
           isDeciding={isDeciding}
           onApprove={() => handleDecide(true)}
           onDeny={() => handleDecide(false)}
+          onAlwaysAllow={() => setPolicyDialogOpen(true)}
         />
       );
     }
@@ -623,12 +654,19 @@ export default function ConversationPage() {
               {coworker.role_description}
             </span>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {pendingApproval
-              ? "Working · paused for your approval"
-              : isTurnActive
-                ? "Working..."
-                : modelLabel}
+          <span className="truncate text-xs text-muted-foreground">
+            {(() => {
+              if (pendingApproval) return "Working · paused for your approval";
+              if (isTurnActive) return "Working...";
+              // Fall back to the server-derived feed: the coworker may be
+              // busy elsewhere (a background task) even while this chat idles.
+              const feed = statuses.get(coworker.id);
+              if (feed && feed.state !== "idle") {
+                const label = COWORKER_STATUS_META[feed.state].label;
+                return feed.detail ? `${label} · ${feed.detail}` : label;
+              }
+              return modelLabel;
+            })()}
           </span>
         </div>
       </div>
@@ -716,9 +754,12 @@ export default function ConversationPage() {
                     toolName={tc.toolName}
                     args={tc.arguments ?? {}}
                     risk={risk}
+                    summary={pendingApproval?.summary}
+                    rationale={pendingApproval?.rationale}
                     isDeciding={isDeciding}
                     onApprove={() => handleDecide(true)}
                     onDeny={() => handleDecide(false)}
+                    onAlwaysAllow={() => setPolicyDialogOpen(true)}
                   />
                 );
               }
@@ -796,6 +837,19 @@ export default function ConversationPage() {
           </div>
         </div>
       </form>
+
+      {pendingApproval && toolsByName.get(pendingApproval.toolName) ? (
+        <ApprovalPolicyDialog
+          open={policyDialogOpen}
+          onOpenChange={setPolicyDialogOpen}
+          workspaceId={conversation.workspace_id}
+          coworkerId={coworker.id}
+          coworkerName={coworker.name}
+          toolId={toolsByName.get(pendingApproval.toolName)!.id}
+          toolName={pendingApproval.toolName}
+          args={pendingApproval.arguments}
+        />
+      ) : null}
     </div>
 
     <aside className="hidden w-72 shrink-0 flex-col gap-4 self-start xl:flex" aria-label="Coworker dossier">

@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from django.core import mail
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from ai.model_router.adapters.deepseek_cloud import DeepSeekCloudAdapter
@@ -121,7 +122,7 @@ class TaskEngineTests(TaskTestBase):
                 "model": "deepseek-v4-flash",
                 "choices": [{
                     "message": {
-                        "content": "",
+                        "content": "I need to run this snippet to verify the fix.",
                         "tool_calls": [{
                             "id": "call_task_1",
                             "type": "function",
@@ -131,6 +132,12 @@ class TaskEngineTests(TaskTestBase):
                     "finish_reason": "tool_calls",
                 }],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 4},
+            },
+            # Consumed by summarize_approval once the dangerous call is gated.
+            {
+                "model": "deepseek-v4-flash",
+                "choices": [{"message": {"content": "Run Python code: print(1)"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3},
             },
             {
                 "model": "deepseek-v4-flash",
@@ -144,12 +151,67 @@ class TaskEngineTests(TaskTestBase):
         self.assertEqual(task.status, Task.Status.NEEDS_APPROVAL)
         approval = ApprovalRequest.objects.get(task_id=task.id)
         self.assertEqual(approval.requested_action["tool_call_id"], "call_task_1")
+        self.assertEqual(approval.summary, "Run Python code: print(1)")
+        self.assertEqual(approval.rationale, "I need to run this snippet to verify the fix.")
 
         decide_approval_request(approval.id, approve=True, decided_by_user_id=self.user.id)
         execute_background_task(task.id)
         task.refresh_from_db()
         self.assertEqual(task.status, Task.Status.COMPLETED)
         self.assertEqual(task.result, "Task finished safely.")
+
+
+class CoworkerStatusTests(TaskTestBase):
+    def _statuses(self) -> dict:
+        response = self.client.get(f"/api/v1/workspaces/{self.workspace.id}/coworkers/status")
+        self.assertEqual(response.status_code, 200)
+        return {row["coworker_id"]: row for row in response.data}
+
+    def test_idle_with_last_run(self):
+        task = self.create_task()
+        task.status = Task.Status.COMPLETED
+        task.completed_at = timezone.now()
+        task.save()
+        row = self._statuses()[str(self.coworker.id)]
+        self.assertEqual(row["state"], "idle")
+        self.assertEqual(row["last_run_title"], "Prepare report")
+        self.assertIsNotNone(row["last_run_at"])
+
+    def test_running_task_is_working(self):
+        task = self.create_task()
+        task.status = Task.Status.IN_PROGRESS
+        task.save()
+        row = self._statuses()[str(self.coworker.id)]
+        self.assertEqual(row["state"], "working")
+        self.assertEqual(row["detail"], "Prepare report")
+
+    def test_pending_approval_wins_over_everything(self):
+        task = self.create_task()
+        task.status = Task.Status.FAILED
+        task.error_message = "boom"
+        task.save()
+        CoworkerToolAttachment.objects.create(
+            coworker=self.coworker, tool=Tool.objects.get(name="execute_code"), enabled=True
+        )
+        ApprovalRequest.objects.create(
+            coworker=self.coworker,
+            tool=Tool.objects.get(name="execute_code"),
+            task_id=task.id,
+            requested_action={"name": "execute_code", "arguments": {}},
+            summary="Run the cleanup script",
+        )
+        row = self._statuses()[str(self.coworker.id)]
+        self.assertEqual(row["state"], "needs_approval")
+        self.assertEqual(row["detail"], "Run the cleanup script")
+
+    def test_recent_failure_is_error_with_message(self):
+        task = self.create_task()
+        task.status = Task.Status.FAILED
+        task.error_message = "Stripe payout reconciliation failed"
+        task.save()
+        row = self._statuses()[str(self.coworker.id)]
+        self.assertEqual(row["state"], "error")
+        self.assertEqual(row["detail"], "Stripe payout reconciliation failed")
 
 
 class NotificationEmailTests(TaskTestBase):

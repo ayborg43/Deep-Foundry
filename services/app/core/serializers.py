@@ -296,6 +296,8 @@ class ApprovalRequestSerializer(serializers.ModelSerializer):
             "task_id",
             "workflow_run_step_id",
             "requested_action",
+            "summary",
+            "rationale",
             "status",
             "decided_by",
             "decided_at",

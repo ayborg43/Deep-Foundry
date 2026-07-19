@@ -10,15 +10,18 @@ contract across Core, AI, and worker entrypoints.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from core.encryption import decrypt_from_bytes
 from core.models import ApprovalRequest as ApprovalRequestModel
 from core.models import (
+    ApprovalPolicy,
     AuditLog,
     Coworker,
     CoworkerToolAttachment,
@@ -55,6 +58,8 @@ class ApprovalRequest:
     tool_id: UUID | str
     requested_action: dict[str, Any]
     status: str
+    summary: str = ""
+    rationale: str = ""
 
 
 @dataclass(frozen=True)
@@ -318,6 +323,8 @@ def create_approval_request(
     message_id: UUID | str | None = None,
     task_id: UUID | str | None = None,
     workflow_run_step_id: UUID | str | None = None,
+    summary: str = "",
+    rationale: str = "",
 ) -> ApprovalRequest:
     """Persists a pending approval_requests row, per DATABASE.md §2.3.
 
@@ -340,6 +347,8 @@ def create_approval_request(
         coworker_id=coworker_id,
         tool_id=tool_id,
         requested_action=requested_action,
+        summary=summary,
+        rationale=rationale,
     )
     return ApprovalRequest(
         id=row.id,
@@ -347,6 +356,60 @@ def create_approval_request(
         tool_id=tool_id,
         requested_action=requested_action,
         status=row.status,
+        summary=row.summary,
+        rationale=row.rationale,
+    )
+
+
+def resolve_approval_policy(
+    *,
+    workspace_id: UUID | str,
+    coworker_id: UUID | str,
+    tool_id: UUID | str,
+    arguments: dict[str, Any],
+) -> UUID | None:
+    """Returns the id of an enabled ApprovalPolicy that auto-approves this
+    tool call, or None.
+
+    Fail-closed on conditions: a policy with a threshold matches only when
+    the addressed argument exists, parses as a number, and is <= the limit.
+    Callers must consult this only AFTER the org policy floor has had its
+    say — floors are governance and always win over member-created policies.
+    """
+    policies = ApprovalPolicy.objects.filter(
+        workspace_id=workspace_id, tool_id=tool_id, enabled=True
+    ).filter(Q(coworker__isnull=True) | Q(coworker_id=coworker_id))
+    for policy in policies:
+        if not policy.argument_path:
+            return policy.id
+        if policy.max_amount is None:
+            continue  # malformed row (path without limit): never matches
+        value: Any = arguments
+        for part in policy.argument_path.split("."):
+            if not isinstance(value, dict) or part not in value:
+                value = None
+                break
+            value = value[part]
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            amount = Decimal(str(value))
+        except InvalidOperation:
+            continue
+        if amount <= policy.max_amount:
+            return policy.id
+    return None
+
+
+def set_approval_request_summary(
+    approval_request_id: UUID | str, *, summary: str, rationale: str
+) -> None:
+    """Best-effort enrichment of a just-created approval request with its
+    human-readable headline. Separate from create_approval_request because
+    summary generation involves a model call that must not run inside the
+    orchestrator's row-lock transaction."""
+    ApprovalRequestModel.objects.filter(id=approval_request_id).update(
+        summary=summary, rationale=rationale
     )
 
 

@@ -12,11 +12,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { RISK_BADGE_CLASS, RISK_LABELS } from "@/lib/coworkers";
-import type { ApprovalRequestData } from "@/lib/types";
+import type { ApprovalPolicy, ApprovalRequestData } from "@/lib/types";
 
 export default function ApprovalsPage() {
   const router = useRouter();
   const [items, setItems] = useState<ApprovalRequestData[]>([]);
+  const [policies, setPolicies] = useState<ApprovalPolicy[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,6 +31,24 @@ export default function ApprovalsPage() {
       )
     );
     setIsLoading(false);
+    try {
+      setPolicies(await apiFetch<ApprovalPolicy[]>(`/workspaces/${workspace}/approval-policies`));
+    } catch {
+      // Policies section just stays hidden.
+    }
+  }
+
+  async function removePolicy(policy: ApprovalPolicy) {
+    setBusyId(policy.id);
+    setError(null);
+    try {
+      await apiFetch(`/approval-policies/${policy.id}`, { method: "DELETE" });
+      setPolicies((current) => current.filter((candidate) => candidate.id !== policy.id));
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Couldn't remove that policy.");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   useEffect(() => {
@@ -112,13 +131,17 @@ export default function ApprovalsPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <h2 id={titleId} className="font-medium">
-                            {actor} wants to run {item.tool_name}
+                            {item.summary || `${actor} wants to run ${item.tool_name}`}
                           </h2>
                           {risk ? (
                             <Badge className={RISK_BADGE_CLASS[risk]}>{RISK_LABELS[risk]}</Badge>
                           ) : null}
                         </div>
+                        {item.rationale ? (
+                          <p className="mt-0.5 text-sm text-muted-foreground">{item.rationale}</p>
+                        ) : null}
                         <p className="text-xs text-muted-foreground">
+                          {actor} · {item.tool_name} ·{" "}
                           {item.task_title ? `Task: ${item.task_title}` : "Conversation action"} ·{" "}
                           {new Date(item.created_at).toLocaleString()}
                         </p>
@@ -167,6 +190,44 @@ export default function ApprovalsPage() {
           </div>
         )}
       </section>
+
+      {policies.length > 0 ? (
+        <section aria-label="Standing policies" className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Standing policies</h2>
+            <p className="text-sm text-muted-foreground">
+              Always-allow rules you&apos;ve created — matching actions run without asking.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {policies.map((policy) => (
+              <Card key={policy.id}>
+                <CardContent className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-mono font-medium">{policy.tool_name}</span>
+                  <Badge className={RISK_BADGE_CLASS[policy.tool_risk_classification]}>
+                    {RISK_LABELS[policy.tool_risk_classification]}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {policy.coworker_name ?? "Any coworker"} ·{" "}
+                    {policy.argument_path
+                      ? `when ${policy.argument_path} ≤ ${policy.max_amount}`
+                      : "always"}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto"
+                    disabled={busyId === policy.id}
+                    onClick={() => void removePolicy(policy)}
+                  >
+                    Remove
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

@@ -30,6 +30,8 @@ export type ChatSSEEvent =
         tool_name: string;
         arguments: Record<string, unknown>;
         message_id: string;
+        summary?: string;
+        rationale?: string;
       };
     }
   | { event: "message_complete"; data: { content: string } }

@@ -2,9 +2,12 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.chat_views import (
+    ApprovalPolicyDeleteView,
+    ApprovalPolicyListCreateView,
     ApprovalRequestApproveView,
     ApprovalRequestDenyView,
     ApprovalRequestListView,
+    ApprovalRequestStatsView,
     ConversationDetailView,
     ConversationListCreateView,
     MessageListSendView,
@@ -46,6 +49,7 @@ from core.memory_views import (
 )
 from core.task_views import (
     ConversationTaskHandoffView,
+    CoworkerStatusListView,
     NotificationListView,
     NotificationReadView,
     TaskApproveView,
@@ -167,6 +171,11 @@ urlpatterns = [
         CoworkerListCreateView.as_view(),
         name="coworker-list-create",
     ),
+    path(
+        "workspaces/<uuid:workspace_id>/coworkers/status",
+        CoworkerStatusListView.as_view(),
+        name="coworker-status-list",
+    ),
     path("coworkers/<uuid:coworker_id>", CoworkerDetailView.as_view(), name="coworker-detail"),
     path(
         "coworkers/<uuid:coworker_id>/versions",
@@ -216,6 +225,21 @@ urlpatterns = [
         "workspaces/<uuid:workspace_id>/approval-requests",
         ApprovalRequestListView.as_view(),
         name="approval-request-list",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/approval-requests/stats",
+        ApprovalRequestStatsView.as_view(),
+        name="approval-request-stats",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/approval-policies",
+        ApprovalPolicyListCreateView.as_view(),
+        name="approval-policy-list-create",
+    ),
+    path(
+        "approval-policies/<uuid:policy_id>",
+        ApprovalPolicyDeleteView.as_view(),
+        name="approval-policy-delete",
     ),
     path(
         "approval-requests/<uuid:approval_request_id>/approve",

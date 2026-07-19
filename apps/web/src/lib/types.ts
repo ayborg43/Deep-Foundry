@@ -161,12 +161,43 @@ export type MarketplaceListing = {
   pricing_model: "free" | "paid" | "pay_what_you_want";
   price_usd: string | null;
   verified_publisher: boolean;
+  publisher_name?: string;
+  category?: string | null;
   latest_version: string | null;
   install_count: number;
   review_count: number;
   rating: number | null;
   manifest?: Record<string, unknown>;
+  // Present only on the detail endpoint (GET /marketplace/listings/{id}).
+  declared_tools?: string[];
+  changelog?: string;
   security_review?: { score: number; status: "passed" | "needs_review" | "failed"; findings: Array<{ severity: string; code: string; message: string }> };
+};
+
+// Standing "always allow" rule created from an approval decision.
+export type ApprovalPolicy = {
+  id: string;
+  tool_id: string;
+  tool_name: string;
+  tool_risk_classification: RiskClassification;
+  coworker_id: string | null;
+  coworker_name: string | null;
+  argument_path: string;
+  max_amount: string | null;
+  created_at: string;
+};
+
+export type CoworkerStatusState = "working" | "idle" | "needs_approval" | "blocked" | "error";
+
+// GET /workspaces/{id}/coworkers/status — derived server-side from pending
+// approvals, task states, and in-flight messages; never stored.
+export type CoworkerStatus = {
+  coworker_id: string;
+  name: string;
+  state: CoworkerStatusState;
+  detail: string;
+  last_run_at: string | null;
+  last_run_title: string | null;
 };
 
 export type ProjectResource = { resource_type: string; resource_id: string };
@@ -325,6 +356,10 @@ export type ApprovalRequestData = {
   task_id: string | null;
   workflow_run_step_id: string | null;
   requested_action: { tool_call_id?: string; name?: string; arguments?: Record<string, unknown> };
+  // Coworker-generated headline + justification; blank when generation
+  // wasn't possible, so every surface falls back to tool_name + arguments.
+  summary?: string;
+  rationale?: string;
   status: ApprovalRequestStatus;
   decided_by: string | null;
   decided_at: string | null;

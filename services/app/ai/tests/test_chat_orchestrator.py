@@ -15,12 +15,16 @@ from django.test import TestCase, TransactionTestCase
 
 from ai.chat_orchestrator import _advance_message_tool_calls, resume_turn, start_turn
 from ai.model_router.adapters.deepseek_cloud import DeepSeekCloudAdapter
+from ai.model_router.errors import AdapterError
 from ai.models import Conversation, ConversationParticipant, Message
 from ai.tool_executor import ToolResult
 from core.coworkers import create_coworker
 from core.encryption import encrypt_to_bytes
 from core.interface import ToolInfo, create_approval_request, decide_approval_request, get_coworker_config
+from decimal import Decimal
+
 from core.models import (
+    ApprovalPolicy,
     ApprovalRequest,
     AuditLog,
     CoworkerToolAttachment,
@@ -113,6 +117,17 @@ class ChatOrchestratorTestBase(TestCase):
             participant_type=ConversationParticipant.ParticipantType.COWORKER,
             participant_id=self.coworker.id,
         )
+        # Approval-summary generation makes a non-streaming _post call after
+        # a tool is gated. Fail it fast by default — summaries degrade to
+        # blank — so no test here can reach the live API; tests asserting
+        # summaries override this patch with a scripted response.
+        post_patcher = patch.object(
+            DeepSeekCloudAdapter,
+            "_post",
+            side_effect=AdapterError("no non-streaming calls in tests"),
+        )
+        post_patcher.start()
+        self.addCleanup(post_patcher.stop)
 
     def _start_turn(self, content="Hello"):
         return list(
@@ -241,6 +256,85 @@ class ApprovalGateTests(ChatOrchestratorTestBase):
         self.assertTrue(
             AuditLog.objects.filter(action="tool.approval_requested").exists()
         )
+        self.assertFalse(AuditLog.objects.filter(action="tool.executed").exists())
+        # setUp fails every non-streaming _post, so summary generation
+        # degraded to blank — the gate itself must be unaffected.
+        self.assertEqual(approval.summary, "")
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_gated_tool_gets_summary_and_rationale(self, mock_stream):
+        """The approval_required event and the stored row both carry the
+        model-generated headline plus the coworker's own preceding words."""
+        mock_stream.return_value = _stream(
+            _content_chunk("I need to run this to verify."),
+            _tool_call_chunk("call_1", "execute_code", '{"code":"print(1)"}'),
+            _finish_chunk("tool_calls"),
+        )
+        with patch.object(DeepSeekCloudAdapter, "_post") as mock_post:
+            mock_post.return_value = {
+                "model": "deepseek-v4-flash",
+                "choices": [
+                    {"message": {"content": "Run Python code: print(1)"}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+            }
+            events = self._start_turn("run some code")
+
+        approval_events = [e for e in events if e.event == "approval_required"]
+        self.assertEqual(len(approval_events), 1)
+        self.assertEqual(approval_events[0].data["summary"], "Run Python code: print(1)")
+        self.assertEqual(approval_events[0].data["rationale"], "I need to run this to verify.")
+        approval = ApprovalRequest.objects.get()
+        self.assertEqual(approval.summary, "Run Python code: print(1)")
+        self.assertEqual(approval.rationale, "I need to run this to verify.")
+        self.assertEqual(approval.status, ApprovalRequest.Status.PENDING)
+        self.assertFalse(AuditLog.objects.filter(action="tool.executed").exists())
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_approval_policy_auto_approves_under_threshold(self, mock_stream):
+        """A standing "always allow under X" policy executes the gated tool
+        without creating an approval request, and audits the standing
+        consent that authorized it."""
+        ApprovalPolicy.objects.create(
+            workspace=self.workspace,
+            coworker=self.coworker,
+            tool=Tool.objects.get(name="execute_code"),
+            argument_path="amount",
+            max_amount=Decimal("250"),
+        )
+        mock_stream.side_effect = [
+            _stream(
+                _tool_call_chunk("call_1", "execute_code", '{"amount": 214.0}'),
+                _finish_chunk("tool_calls"),
+            ),
+            _stream(_content_chunk("Done."), _finish_chunk("stop")),
+        ]
+        events = self._start_turn("refund the customers")
+        names = [e.event for e in events]
+        self.assertIn("tool_call_started", names)
+        self.assertNotIn("approval_required", names)
+        self.assertFalse(ApprovalRequest.objects.exists())
+        self.assertTrue(AuditLog.objects.filter(action="tool.policy_auto_approved").exists())
+        self.assertTrue(AuditLog.objects.filter(action="tool.executed").exists())
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_approval_policy_over_threshold_still_gates(self, mock_stream):
+        """Fail-closed: an amount over the limit — or a missing argument —
+        goes through the normal approval gate."""
+        ApprovalPolicy.objects.create(
+            workspace=self.workspace,
+            coworker=self.coworker,
+            tool=Tool.objects.get(name="execute_code"),
+            argument_path="amount",
+            max_amount=Decimal("250"),
+        )
+        mock_stream.return_value = _stream(
+            _tool_call_chunk("call_1", "execute_code", '{"amount": 400.0}'),
+            _finish_chunk("tool_calls"),
+        )
+        events = self._start_turn("refund the customers")
+        self.assertEqual([e.event for e in events], ["approval_required"])
+        self.assertEqual(ApprovalRequest.objects.get().status, ApprovalRequest.Status.PENDING)
         self.assertFalse(AuditLog.objects.filter(action="tool.executed").exists())
 
     @patch.object(DeepSeekCloudAdapter, "_post_stream")
