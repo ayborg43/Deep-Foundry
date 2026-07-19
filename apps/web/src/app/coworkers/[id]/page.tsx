@@ -127,6 +127,9 @@ export default function CoworkerDetailPage() {
   );
   const [compareVersion, setCompareVersion] = useState<number | null>(null);
 
+  // Avatar upload ---------------------------------------------------------
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
   // Archive ---------------------------------------------------------------
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -392,18 +395,42 @@ export default function CoworkerDetailPage() {
     }
   }
 
-  async function handleArchive() {
+  async function handleAvatarUpload(file: File) {
+    if (!coworker) return;
+    setIsUploadingAvatar(true);
+    setIdentityError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const updated = await apiFetch<Coworker>(`/coworkers/${coworker.id}/avatar`, {
+        method: "POST",
+        body: form,
+      });
+      setCoworker(updated);
+      applyIdentity(updated);
+    } catch (err) {
+      setIdentityError(
+        err instanceof ApiRequestError ? err.message : "Couldn't upload the avatar."
+      );
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
+
+  async function handleFire(permanent: boolean) {
     if (!coworker) return;
     setIsArchiving(true);
     setArchiveError(null);
     try {
-      await apiFetch(`/coworkers/${coworker.id}`, { method: "DELETE" });
+      await apiFetch(`/coworkers/${coworker.id}${permanent ? "?permanent=true" : ""}`, {
+        method: "DELETE",
+      });
       router.push("/coworkers");
     } catch (err) {
       setArchiveError(
         err instanceof ApiRequestError
           ? err.message
-          : "Couldn't archive this coworker."
+          : "Couldn't remove this coworker."
       );
       setIsArchiving(false);
     }
@@ -514,17 +541,26 @@ export default function CoworkerDetailPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="avatar_url">Avatar URL</Label>
-              <Input
-                id="avatar_url"
-                type="text"
-                value={avatarUrl}
-                placeholder="https://..."
-                onChange={(e) => {
-                  setAvatarUrl(e.target.value);
-                  setIdentitySaved(false);
-                }}
-              />
+              <Label htmlFor="avatar_file">Avatar</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="avatar_file"
+                  type="file"
+                  accept="image/*"
+                  disabled={isUploadingAvatar}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleAvatarUpload(file);
+                    e.target.value = "";
+                  }}
+                />
+                {isUploadingAvatar ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">Uploading…</span>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                PNG or JPG, up to 1&nbsp;MB. Saved immediately.
+              </p>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -856,13 +892,13 @@ export default function CoworkerDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Archive --------------------------------------------------------- */}
+      {/* Fire / delete ---------------------------------------------------- */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Archive coworker</CardTitle>
+          <CardTitle className="text-base">Fire coworker</CardTitle>
           <CardDescription>
-            Removes this coworker from your roster. This can&apos;t be undone
-            from this screen.
+            Removes {coworker.name} from your roster. Firing keeps their
+            history; permanent deletion erases it too.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -874,35 +910,47 @@ export default function CoworkerDetailPage() {
           <Dialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
             <DialogTrigger asChild>
               <Button type="button" variant="destructive" className="w-fit">
-                Archive coworker
+                Fire {coworker.name}…
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Archive {coworker.name}?</DialogTitle>
+                <DialogTitle>Fire {coworker.name}?</DialogTitle>
                 <DialogDescription>
-                  {coworker.name} will disappear from your coworkers roster
-                  and can no longer be chatted with. This can&apos;t be undone
-                  from this screen.
+                  {coworker.name} disappears from your roster and can no
+                  longer be chatted with or assigned tasks. Firing keeps
+                  their tasks, conversations, and audit history. Deleting
+                  permanently erases all of it — there is no undo.
                 </DialogDescription>
               </DialogHeader>
-              <DialogFooter>
+              <DialogFooter className="gap-2 sm:justify-between">
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => setArchiveDialogOpen(false)}
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => void handleFire(true)}
                   disabled={isArchiving}
                 >
-                  Cancel
+                  Delete permanently
                 </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={handleArchive}
-                  disabled={isArchiving}
-                >
-                  {isArchiving ? "Archiving..." : "Archive coworker"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setArchiveDialogOpen(false)}
+                    disabled={isArchiving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => void handleFire(false)}
+                    disabled={isArchiving}
+                  >
+                    {isArchiving ? "Working..." : `Fire ${coworker.name}`}
+                  </Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>

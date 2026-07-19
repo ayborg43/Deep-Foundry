@@ -16,6 +16,7 @@ from core.chat_views import (
     MessageStreamView,
 )
 from core.views import (
+    CoworkerAvatarUploadView,
     CoworkerDetailView,
     CoworkerListCreateView,
     CoworkerToolAttachView,
@@ -189,6 +190,11 @@ urlpatterns = [
         name="coworker-status-list",
     ),
     path("coworkers/<uuid:coworker_id>", CoworkerDetailView.as_view(), name="coworker-detail"),
+    path(
+        "coworkers/<uuid:coworker_id>/avatar",
+        CoworkerAvatarUploadView.as_view(),
+        name="coworker-avatar-upload",
+    ),
     path(
         "coworkers/<uuid:coworker_id>/versions",
         CoworkerVersionsView.as_view(),

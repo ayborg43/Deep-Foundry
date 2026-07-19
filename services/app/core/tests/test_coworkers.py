@@ -400,3 +400,64 @@ class CoworkerToolAttachmentTests(CoworkerTestBase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class FireCoworkerTests(CoworkerTestBase):
+    def test_fire_archives_and_hides_from_roster(self):
+        created = self._create_coworker()
+        response = self.client.delete(self._detail_url(created["id"]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "archived")
+
+        coworker = Coworker.objects.get(id=created["id"])
+        self.assertEqual(coworker.status, Coworker.Status.ARCHIVED)
+
+        listing = self.client.get(self._list_create_url())
+        self.assertEqual([c["id"] for c in listing.data], [])
+
+    def test_permanent_delete_removes_the_row(self):
+        created = self._create_coworker()
+        response = self.client.delete(f"{self._detail_url(created['id'])}?permanent=true")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Coworker.objects.filter(id=created["id"]).exists())
+
+    def test_stranger_cannot_fire(self):
+        created = self._create_coworker()
+        self._auth_as(self.stranger)
+        response = self.client.delete(self._detail_url(created["id"]))
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND),
+        )
+        self.assertEqual(
+            Coworker.objects.get(id=created["id"]).status, Coworker.Status.ACTIVE
+        )
+
+
+class AvatarUploadTests(CoworkerTestBase):
+    def _upload_url(self, coworker_id):
+        return reverse("coworker-avatar-upload", kwargs={"coworker_id": coworker_id})
+
+    def test_upload_stores_inline_data_uri(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        created = self._create_coworker()
+        image = SimpleUploadedFile(
+            "avatar.png", b"\x89PNG\r\n\x1a\n" + b"0" * 32, content_type="image/png"
+        )
+        response = self.client.post(
+            self._upload_url(created["id"]), {"file": image}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(response.data["avatar_url"].startswith("data:image/png;base64,"))
+
+    def test_non_image_upload_is_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        created = self._create_coworker()
+        doc = SimpleUploadedFile("notes.txt", b"hello", content_type="text/plain")
+        response = self.client.post(
+            self._upload_url(created["id"]), {"file": doc}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIsNone(Coworker.objects.get(id=created["id"]).avatar_url)

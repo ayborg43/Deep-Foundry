@@ -1,3 +1,4 @@
+import base64
 import logging
 
 import pyotp
@@ -12,6 +13,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -575,6 +577,26 @@ class CoworkerDetailView(APIView):
         coworker = get_coworker_for_member(request.user, coworker_id)
         return Response(CoworkerSerializer(coworker).data)
 
+    def delete(self, request: Request, coworker_id: str) -> Response:
+        """Fire a coworker. The default is archive: the coworker disappears
+        from the roster and the status feed, but its history — tasks,
+        conversations, approvals, audit trail — survives. `?permanent=true`
+        deletes the row outright, cascading to everything attached."""
+        coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
+        permanent = request.query_params.get("permanent") == "true"
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id,
+            action="coworker.deleted" if permanent else "coworker.fired",
+            resource_type="coworker", resource_id=coworker.id,
+            workspace_id=coworker.workspace_id, metadata={"name": coworker.name},
+        )
+        if permanent:
+            coworker.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        coworker.status = Coworker.Status.ARCHIVED
+        coworker.save(update_fields=["status", "updated_at"])
+        return Response(CoworkerSerializer(coworker).data)
+
     def patch(self, request: Request, coworker_id: str) -> Response:
         coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
         serializer = CoworkerUpdateSerializer(data=request.data)
@@ -622,15 +644,35 @@ class CoworkerDetailView(APIView):
         )
         return Response(CoworkerSerializer(coworker).data)
 
-    def delete(self, request: Request, coworker_id: str) -> Response:
+class CoworkerAvatarUploadView(APIView):
+    """POST /coworkers/{id}/avatar — multipart image upload, stored inline
+    as a data URI on the coworker row. Small by design (1 MB cap): avatars
+    render at 40px, and inlining sidesteps auth on <img> requests."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    MAX_AVATAR_BYTES = 1024 * 1024
+
+    def post(self, request: Request, coworker_id: str) -> Response:
         coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
-        coworker.status = Coworker.Status.ARCHIVED
-        coworker.save(update_fields=["status", "updated_at"])
+        upload = request.FILES.get("file")
+        if upload is None:
+            raise ValidationError({"file": "An image file is required."})
+        content_type = upload.content_type or ""
+        if not content_type.startswith("image/"):
+            raise ValidationError({"file": "Only image uploads are supported."})
+        if upload.size > self.MAX_AVATAR_BYTES:
+            raise ValidationError({"file": "Avatars may not exceed 1 MB."})
+        encoded = base64.b64encode(upload.read()).decode("ascii")
+        coworker.avatar_url = f"data:{content_type};base64,{encoded}"
+        coworker.save(update_fields=["avatar_url", "updated_at"])
         write_audit_log(
-            actor_type="user", actor_id=request.user.id, action="coworker.archive",
-            resource_type="coworker", resource_id=coworker.id, workspace_id=coworker.workspace_id,
+            actor_type="user", actor_id=request.user.id, action="coworker.avatar_updated",
+            resource_type="coworker", resource_id=coworker.id,
+            workspace_id=coworker.workspace_id,
         )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(CoworkerSerializer(coworker).data)
 
 
 class CoworkerVersionsView(generics.ListAPIView):

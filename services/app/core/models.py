@@ -251,7 +251,10 @@ class Coworker(UUIDPrimaryKeyModel):
     # as ai.models.ModelCall.coworker_id in Milestone 2.
     owner_id = models.UUIDField()
     name = models.CharField(max_length=255)
-    avatar_url = models.URLField(null=True, blank=True)
+    # TextField, not URLField: uploaded avatars are stored inline as data
+    # URIs (self-contained for self-hosted deployments — no public object
+    # storage URL to mint or expire).
+    avatar_url = models.TextField(null=True, blank=True)
     current_version = models.ForeignKey(
         "CoworkerVersion",
         on_delete=models.SET_NULL,

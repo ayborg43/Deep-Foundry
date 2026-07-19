@@ -262,7 +262,7 @@ export default function HomePage() {
           }}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="How can I help you today?"
+          placeholder="Describe a task or start a conversation"
           aria-label="Message"
           className="max-h-52 w-full resize-none bg-transparent px-2 py-1.5 text-[0.95rem] outline-none placeholder:text-muted-foreground"
         />
@@ -309,8 +309,8 @@ export default function HomePage() {
 
       <p className="mt-2 px-1 text-xs text-muted-foreground">
         {mode === "cowork"
-          ? "Cowork runs the task in the background and returns a result — with approval gates on anything risky."
-          : "Chat is an interactive, streaming conversation with your coworker."}
+          ? "Runs in the background. Risky actions still ask you first."
+          : "A live conversation with your coworker."}
       </p>
 
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
@@ -326,11 +326,10 @@ export default function HomePage() {
               {greeting()}{name ? `, ${name}` : ""}
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Your coworkers need{" "}
               <span className="font-medium text-foreground">
-                {queue.length} {queue.length === 1 ? "decision" : "decisions"}
+                {queue.length} {queue.length === 1 ? "approval" : "approvals"}
               </span>{" "}
-              before they can continue. Review each action below.
+              waiting on you.
             </p>
           </div>
           <div className="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
