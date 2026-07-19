@@ -121,6 +121,13 @@ def start_turn(
         content=content,
         status=Message.Status.COMPLETE,
     )
+    if not conversation.title:
+        # Untitled conversations (e.g. started from a coworker page) take
+        # their title from the first user message, so lists never show
+        # "Untitled conversation".
+        condensed = " ".join(content.split())
+        conversation.title = condensed if len(condensed) <= 80 else f"{condensed[:77]}..."
+        conversation.save(update_fields=["title"])
     yield from _continue_turn(
         conversation=conversation, coworker_id=coworker_id, workspace_id=workspace_id
     )

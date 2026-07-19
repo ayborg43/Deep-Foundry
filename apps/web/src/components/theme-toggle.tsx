@@ -43,10 +43,25 @@ export function ThemeToggle({
 }: {
   className?: string;
   /** "segmented" (default): light/system/dark, three visible options.
-   *  "icon": a single button that toggles light ↔ dark. */
-  variant?: "segmented" | "icon";
+   *  "icon": a single button that toggles light ↔ dark.
+   *  "row": a full-width labeled pill ("Dark mode" / "Light mode"). */
+  variant?: "segmented" | "icon" | "row";
 }) {
   const { pref, choose } = useThemePref();
+
+  if (variant === "row") {
+    const dark = isDark(pref);
+    return (
+      <button
+        type="button"
+        onClick={() => choose(dark ? "light" : "dark")}
+        className={`flex w-full items-center gap-2.5 rounded-[11px] border border-border bg-card px-3 py-2 text-[0.8125rem] font-medium text-muted-foreground shadow-[var(--shadow-sm)] transition-colors hover:text-foreground ${className}`}
+      >
+        {dark ? <SunIcon className="size-4" /> : <MoonIcon className="size-4" />}
+        {dark ? "Light mode" : "Dark mode"}
+      </button>
+    );
+  }
 
   if (variant === "icon") {
     const dark = isDark(pref);

@@ -46,6 +46,7 @@ import {
   RISK_LABELS,
 } from "@/lib/coworkers";
 import type {
+  Conversation,
   Coworker,
   CoworkerToolAttachment,
   CoworkerVersion,
@@ -381,7 +382,13 @@ export default function CoworkerDetailPage() {
       if (!workspaceId) {
         throw new Error("Couldn't determine your current workspace.");
       }
-      const conversation = await createConversation(workspaceId, coworker.id);
+      // Resume the most recent conversation with this coworker (the list is
+      // newest-first) instead of piling up a fresh empty one per visit.
+      const existing = await apiFetch<Conversation[]>(
+        `/conversations?workspace_id=${workspaceId}`
+      );
+      const latest = existing.find((conv) => conv.coworker_id === coworker.id);
+      const conversation = latest ?? (await createConversation(workspaceId, coworker.id));
       router.push(`/conversations/${conversation.id}`);
     } catch (err) {
       setChatError(

@@ -32,6 +32,7 @@ import {
 
 import { CoworkerStatusGlyph } from "@/components/coworker-status";
 import { Wordmark } from "@/components/logo";
+import { SidebarUser } from "@/components/sidebar-user";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { apiFetch } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
@@ -316,6 +317,8 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         ) : null}
       </nav>
+
+      <SidebarUser />
     </div>
   );
 }

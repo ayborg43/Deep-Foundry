@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 import { AppShell } from "@/components/app-shell";
+import { PwaRegister } from "@/components/pwa-register";
 
 const hankenGrotesk = Hanken_Grotesk({
   variable: "--font-hanken-grotesk",
@@ -17,6 +18,19 @@ const jetBrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Deep-Foundry",
   description: "Persistent AI coworkers with memory and human-controlled permissions.",
+  applicationName: "Deep-Foundry",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Deep-Foundry",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f4f0" },
+    { media: "(prefers-color-scheme: dark)", color: "#131210" },
+  ],
 };
 
 // Runs synchronously before first paint: (1) sets the `.dark` class so the
@@ -39,6 +53,7 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <PwaRegister />
         <AppShell>{children}</AppShell>
       </body>
     </html>
