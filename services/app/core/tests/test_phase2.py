@@ -1,9 +1,11 @@
 import hashlib
 import hmac
+import importlib
 import json
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.apps import apps as django_apps
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -87,6 +89,40 @@ class WorkflowTests(Phase2TestBase):
 
 
 class MarketplaceAndSdkTests(Phase2TestBase):
+    def test_remove_demo_packs_handles_a_backfilled_default_coworker(self):
+        demo_user = User.objects.create_user(
+            email="marketplace@agentarium.local",
+            password=None,
+            display_name="Deep-Foundry",
+            is_active=False,
+        )
+        demo_workspace = Workspace.objects.create(
+            name="Deep-Foundry First Party",
+            type=Workspace.WorkspaceType.ORGANIZATION,
+            owner=demo_user,
+        )
+        profile = PermissionProfile.objects.create(
+            workspace=demo_workspace,
+            name="Default",
+        )
+        create_coworker(
+            workspace=demo_workspace,
+            owner=demo_user,
+            created_by=demo_user,
+            name="General Assistant",
+            role_description="A backfilled default coworker.",
+            model_binding={"primary": "deepseek-v4-flash"},
+            permission_profile=profile,
+        )
+
+        migration = importlib.import_module(
+            "core.migrations.0025_remove_demo_marketplace_packs"
+        )
+        migration.remove_demo_packs(django_apps, schema_editor=None)
+
+        self.assertFalse(User.objects.filter(id=demo_user.id).exists())
+        self.assertFalse(Workspace.objects.filter(id=demo_workspace.id).exists())
+
     def test_first_party_pack_install_provisions_team_and_scheduled_workflow(self):
         listing = MarketplaceListing.objects.get(name="Developer Team")
         response = self.client.post(f"/api/v1/marketplace/listings/{listing.id}/install", {"workspace_id": str(self.workspace.id)}, format="json")

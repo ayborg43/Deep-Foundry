@@ -11,6 +11,7 @@ from django.db import migrations
 def remove_demo_packs(apps, schema_editor):
     User = apps.get_model("core", "User")
     Workspace = apps.get_model("core", "Workspace")
+    Coworker = apps.get_model("core", "Coworker")
     Listing = apps.get_model("core", "MarketplaceListing")
     Install = apps.get_model("core", "MarketplaceInstall")
 
@@ -21,6 +22,11 @@ def remove_demo_packs(apps, schema_editor):
     listings = Listing.objects.filter(publisher_workspace__in=workspaces)
     Install.objects.filter(listing_version__listing__in=listings).delete()
     listings.delete()
+    # The default-coworker backfill also visited this seeded publisher
+    # workspace on existing installations. Its CoworkerVersion protects the
+    # workspace's PermissionProfile, so delete only coworkers owned by this
+    # placeholder workspace before cascading the workspace itself.
+    Coworker.objects.filter(workspace__in=workspaces).delete()
     workspaces.delete()
     user.delete()
 
