@@ -136,7 +136,7 @@ REST_FRAMEWORK = {
     # Application-level gateway limit from API.md §10. UserRateThrottle also
     # keys unauthenticated auth/bootstrap requests by source IP.
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.UserRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"user": "1000/min"},
+    "DEFAULT_THROTTLE_RATES": {"user": "1000/min", "password_reset": "20/hour"},
 }
 
 SIMPLE_JWT = {

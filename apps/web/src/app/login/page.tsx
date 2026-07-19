@@ -185,17 +185,12 @@ export default function LoginPage() {
             <div className="grid gap-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-            <button
-              type="button"
-              onClick={() =>
-                setNotice(
-                  "Password reset is not configured on this Foundry instance. Contact your administrator.",
-                )
-              }
+                <Link
+                  href="/forgot-password"
                   className="text-xs font-medium text-primary hover:underline"
                 >
                   Forgot?
-                </button>
+                </Link>
               </div>
               <div className="relative">
                 <Input

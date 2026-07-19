@@ -29,6 +29,8 @@ from core.views import (
     MFAEnrollConfirmView,
     MFAEnrollView,
     MFAVerifyView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
     ProviderCredentialDestroyView,
     ProviderCredentialListCreateView,
     RegisterView,
@@ -130,6 +132,16 @@ urlpatterns = [
     path("auth/register", RegisterView.as_view(), name="auth-register"),
     path("auth/login", LoginView.as_view(), name="auth-login"),
     path("auth/logout", LogoutView.as_view(), name="auth-logout"),
+    path(
+        "auth/password-reset/request",
+        PasswordResetRequestView.as_view(),
+        name="auth-password-reset-request",
+    ),
+    path(
+        "auth/password-reset/confirm",
+        PasswordResetConfirmView.as_view(),
+        name="auth-password-reset-confirm",
+    ),
     path("auth/refresh", TokenRefreshView.as_view(), name="auth-refresh"),
     path(
         "auth/oauth/google/callback",

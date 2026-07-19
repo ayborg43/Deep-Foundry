@@ -2,15 +2,20 @@ import logging
 
 import pyotp
 from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
 from django.db import transaction
 from django.core import signing
 from django.core.signing import BadSignature, SignatureExpired
 from django.shortcuts import get_object_or_404
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -42,6 +47,8 @@ from core.serializers import (
     LoginSerializer,
     MFAEnrollConfirmSerializer,
     MFALoginVerifySerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     ProviderCredentialSerializer,
     RegisterSerializer,
     ToolSerializer,
@@ -182,6 +189,76 @@ class LoginView(APIView):
             resource_type="user", resource_id=user.id, workspace_id=_personal_workspace_id(user),
         )
         return Response({"tokens": _issue_tokens(user)})
+
+
+class PasswordResetRequestView(APIView):
+    """POST /auth/password-reset/request — always answers 200 with the same
+    body whether or not the address has an account (no user enumeration).
+    The token is Django's stateless default generator: it self-invalidates
+    the moment the password changes, and expires per PASSWORD_RESET_TIMEOUT.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    def post(self, request: Request) -> Response:
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = User.objects.normalize_email(serializer.validated_data["email"])
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        if user is not None:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{settings.WEB_APP_URL}/reset-password?uid={uid}&token={token}"
+            try:
+                send_mail(
+                    "Reset your Deep-Foundry password",
+                    "We received a request to reset the password for this account.\n\n"
+                    f"Reset it here: {reset_url}\n\n"
+                    "If you didn't ask for this, you can safely ignore this email — "
+                    "the link only works for a limited time and only once.",
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                )
+            except Exception:
+                # The generic response below must go out regardless — a
+                # send failure is an ops problem, not the requester's.
+                logger.exception("Password reset email failed to send")
+            else:
+                write_audit_log(
+                    actor_type="user", actor_id=user.id,
+                    action="user.password_reset_requested",
+                    resource_type="user", resource_id=user.id,
+                )
+        return Response(
+            {"detail": "If an account exists for that address, a reset link is on its way."}
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    def post(self, request: Request) -> Response:
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            user_id = urlsafe_base64_decode(data["uid"]).decode()
+            user = User.objects.get(pk=user_id, is_active=True)
+        except (ValueError, UnicodeDecodeError, User.DoesNotExist):
+            return _error("invalid_token", "This reset link is invalid or has expired.", 400)
+        if not default_token_generator.check_token(user, data["token"]):
+            return _error("invalid_token", "This reset link is invalid or has expired.", 400)
+        user.set_password(data["password"])
+        user.save(update_fields=["password"])
+        write_audit_log(
+            actor_type="user", actor_id=user.id, action="user.password_reset_completed",
+            resource_type="user", resource_id=user.id,
+        )
+        return Response({"detail": "Password updated. You can now sign in."})
 
 
 class LogoutView(APIView):

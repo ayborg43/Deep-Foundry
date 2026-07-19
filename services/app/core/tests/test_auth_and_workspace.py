@@ -566,3 +566,86 @@ class GoogleOAuthTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["user"]["id"], str(existing.id))
+
+
+class PasswordResetTests(APITestCase):
+    """Forgot-password flow: request always answers the same generic 200,
+    the emailed link resets the password exactly once, and the token dies
+    the moment it is used."""
+
+    NEW_PASSWORD = "battery staple horse correct 24"
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="resetme@example.com", password=VALID_PASSWORD
+        )
+        provision_personal_workspace(self.user)
+
+    def _request_reset(self, email="resetme@example.com"):
+        with self.settings(
+            EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"
+        ):
+            from django.core import mail
+
+            response = self.client.post(
+                reverse("auth-password-reset-request"), {"email": email}
+            )
+            return response, list(mail.outbox)
+
+    def _link_params(self, body: str) -> dict:
+        from urllib.parse import parse_qs, urlparse
+
+        link = next(word for word in body.split() if word.startswith("http"))
+        query = parse_qs(urlparse(link).query)
+        return {"uid": query["uid"][0], "token": query["token"][0]}
+
+    def test_request_sends_link_and_confirm_resets_password(self):
+        response, outbox = self._request_reset()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(outbox), 1)
+        self.assertEqual(outbox[0].to, ["resetme@example.com"])
+
+        params = self._link_params(outbox[0].body)
+        confirm = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            {**params, "password": self.NEW_PASSWORD},
+        )
+        self.assertEqual(confirm.status_code, status.HTTP_200_OK, confirm.data)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.NEW_PASSWORD))
+
+        login = self.client.post(
+            reverse("auth-login"),
+            {"email": "resetme@example.com", "password": self.NEW_PASSWORD},
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+
+        # The link is single-use: changing the password invalidated it.
+        reuse = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            {**params, "password": "yet another fine password 99"},
+        )
+        self.assertEqual(reuse.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unknown_email_gets_same_response_and_no_mail(self):
+        response, outbox = self._request_reset(email="nobody@example.com")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(outbox, [])
+        self.assertIn("detail", response.data)
+
+    def test_confirm_rejects_weak_password(self):
+        _, outbox = self._request_reset()
+        params = self._link_params(outbox[0].body)
+        confirm = self.client.post(
+            reverse("auth-password-reset-confirm"), {**params, "password": "short"}
+        )
+        self.assertEqual(confirm.status_code, status.HTTP_400_BAD_REQUEST)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(VALID_PASSWORD))
+
+    def test_confirm_rejects_garbage_uid(self):
+        confirm = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            {"uid": "not-base64!!", "token": "whatever", "password": self.NEW_PASSWORD},
+        )
+        self.assertEqual(confirm.status_code, status.HTTP_400_BAD_REQUEST)
