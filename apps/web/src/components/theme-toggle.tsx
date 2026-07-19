@@ -58,7 +58,7 @@ export function ThemeToggle({
         title={dark ? "Switch to light theme" : "Switch to dark theme"}
         className={`flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${className}`}
       >
-        {dark ? <MoonIcon className="size-4" /> : <SunIcon className="size-4" />}
+      {dark ? <SunIcon className="size-4" /> : <MoonIcon className="size-4" />}
       </button>
     );
   }

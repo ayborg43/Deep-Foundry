@@ -3,11 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import {
+  ArrowRightIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LockKeyholeIcon,
+} from "lucide-react";
 
-import { AuthShowcase } from "@/components/auth/auth-showcase";
-import { GoogleAuthButton } from "@/components/google-auth-button";
-import { LogoMark } from "@/components/logo";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { GithubMark } from "@/components/auth/github-mark";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,22 +21,24 @@ import { setTokens } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import type { LoginResponse, Tokens } from "@/lib/types";
 
-// Sized up from the compact app-shell defaults (h-8/h-9) — this is a
-// once-per-session, front-door surface, not dense product chrome.
-const fieldClass = "h-11 rounded-xl px-3.5 text-base";
+const fieldClass = "h-10 rounded-[9px] bg-card px-3 text-[0.875rem]";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [code, setCode] = useState("");
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setNotice(null);
     setIsSubmitting(true);
 
     try {
@@ -53,7 +59,7 @@ export default function LoginPage() {
       setError(
         err instanceof ApiRequestError
           ? err.message
-          : "Something went wrong. Please try again."
+          : "Something went wrong. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -78,154 +84,195 @@ export default function LoginPage() {
       setError(
         err instanceof ApiRequestError
           ? err.message
-          : "Something went wrong. Please try again."
+          : "Something went wrong. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  function unavailable(provider: string) {
+    setError(null);
+    setNotice(`${provider} sign-in is not configured on this Foundry instance.`);
+  }
+
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <AuthShowcase />
+    <AuthShell active="login">
+      {mfaToken ? (
+        <>
+          <h1 className="text-[1.375rem] font-bold tracking-[-0.02em]">
+            Two-factor verification
+          </h1>
+          <p className="mt-1 text-[0.8125rem] leading-5 text-muted-foreground">
+            Enter the 6-digit code from your authenticator app.
+          </p>
 
-      <div className="flex flex-col justify-center px-6 py-12 sm:px-10 md:px-16 lg:px-14 xl:px-20">
-        <div className="auth-panel-in mx-auto w-full max-w-sm">
-          <div className="mb-9 flex items-center justify-between">
-            <Link
-              href="/"
-              aria-label="Back to Deep-Foundry home"
-              className="flex items-center gap-2 opacity-90 transition-opacity hover:opacity-100"
+          <form onSubmit={handleMfaSubmit} className="mt-6 flex flex-col gap-4">
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="grid gap-1.5">
+              <Label htmlFor="code">Authentication code</Label>
+              <Input
+                id="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                required
+                autoFocus
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                className={cn(fieldClass, "text-center font-mono tracking-[0.3em]")}
+              />
+            </div>
+            <Button
+              type="submit"
+              className="h-[42px] rounded-[9px] bg-foreground text-background hover:bg-foreground/90"
+              disabled={isSubmitting}
             >
-              <LogoMark />
-              <span className="font-heading text-[0.9375rem] font-semibold tracking-tight">
-                Deep-Foundry
-              </span>
-            </Link>
-            <ThemeToggle variant="icon" />
-          </div>
+              {isSubmitting ? "Verifying…" : "Verify"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-10"
+              onClick={() => {
+                setMfaToken(null);
+                setCode("");
+                setError(null);
+              }}
+            >
+              Back to sign in
+            </Button>
+          </form>
+        </>
+      ) : (
+        <>
+          <h1 className="text-[1.375rem] font-bold tracking-[-0.02em]">Welcome back</h1>
+          <p className="mt-1 text-[0.8125rem] leading-5 text-muted-foreground">
+            Sign in to your foundry to pick up where your coworkers left off.
+          </p>
 
-          {mfaToken ? (
-            <>
-              <h1 className="font-heading text-[1.75rem] font-medium tracking-[-0.02em] text-balance">
-                Two-factor verification
-              </h1>
-              <p className="mt-1.5 text-[0.9375rem] text-muted-foreground">
-                Enter the 6-digit code from your authenticator app.
-              </p>
+          <form onSubmit={handleLoginSubmit} className="mt-6 flex flex-col gap-4">
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            {notice ? (
+              <Alert>
+                <AlertDescription>{notice}</AlertDescription>
+              </Alert>
+            ) : null}
 
-              <form onSubmit={handleMfaSubmit} className="mt-7 flex flex-col gap-4">
-                {error ? (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                ) : null}
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                autoFocus
+                placeholder="sarah@northwind.co"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className={fieldClass}
+              />
+            </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="code">Authentication code</Label>
-                  <Input
-                    id="code"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    required
-                    autoFocus
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    className={cn(fieldClass, "text-center tracking-[0.3em]")}
-                  />
-                </div>
-
-                <Button type="submit" className="h-11 w-full rounded-xl text-base" disabled={isSubmitting}>
-                  {isSubmitting ? "Verifying…" : "Verify"}
-                </Button>
-                <Button
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+            <button
+              type="button"
+              onClick={() =>
+                setNotice(
+                  "Password reset is not configured on this Foundry instance. Contact your administrator.",
+                )
+              }
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Forgot?
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className={cn(fieldClass, "pr-10")}
+                />
+                <button
                   type="button"
-                  variant="ghost"
-                  className="h-11 w-full rounded-xl text-base"
-                  onClick={() => {
-                    setMfaToken(null);
-                    setCode("");
-                    setError(null);
-                  }}
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
                 >
-                  Back to login
-                </Button>
-              </form>
-            </>
-          ) : (
-            <>
-              <h1 className="font-heading text-[1.75rem] font-medium tracking-[-0.02em] text-balance">
-                Welcome back
-              </h1>
-              <p className="mt-1.5 text-[0.9375rem] text-muted-foreground">
-                Log in to your Deep-Foundry workspace.
-              </p>
+                  {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                </button>
+              </div>
+            </div>
 
-              <form onSubmit={handleLoginSubmit} className="mt-7 flex flex-col gap-4">
-                {error ? (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                ) : null}
+            <label className="flex min-h-5 w-fit cursor-pointer items-center gap-2 text-[0.8125rem] text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(event) => setRemember(event.target.checked)}
+                className="size-4 rounded accent-foreground"
+              />
+              Keep me signed in on this device
+            </label>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    autoFocus
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={fieldClass}
-                  />
-                </div>
+            <Button
+              type="submit"
+              className="h-[42px] rounded-[9px] bg-foreground text-background hover:bg-foreground/90"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Signing in…" : "Sign in"}
+              {!isSubmitting ? <ArrowRightIcon data-icon="inline-end" /> : null}
+            </Button>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className={fieldClass}
-                  />
-                </div>
+            <div className="flex items-center gap-3 text-[0.6875rem] text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              or continue with
+              <span className="h-px flex-1 bg-border" />
+            </div>
 
-                <Button
-                  type="submit"
-                  className="mt-1 h-11 w-full rounded-xl text-base"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Logging in…" : "Log in"}
-                </Button>
+            <div className="grid grid-cols-2 gap-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-[9px] bg-card"
+                onClick={() => unavailable("GitHub")}
+              >
+                <GithubMark className="size-4" />
+                GitHub
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-[9px] bg-card"
+                onClick={() => unavailable("SSO / SAML")}
+              >
+                <LockKeyholeIcon />
+                SSO / SAML
+              </Button>
+            </div>
+          </form>
 
-                <div className="relative py-1 text-center text-xs text-muted-foreground">
-                  <span className="relative bg-background px-2">or</span>
-                  <div className="absolute inset-x-0 top-1/2 -z-10 border-t" />
-                </div>
-
-                <GoogleAuthButton className="h-11 rounded-xl text-base" />
-              </form>
-
-              <p className="mt-8 text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{" "}
-                <Link
-                  href="/signup"
-                  className="font-medium text-foreground underline-offset-4 hover:underline"
-                >
-                  Sign up
-                </Link>
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+          <p className="mt-7 text-center text-[0.75rem] text-muted-foreground">
+            New to this foundry?{" "}
+            <Link href="/signup" className="font-semibold text-primary hover:underline">
+              Create an account
+            </Link>
+          </p>
+        </>
+      )}
+    </AuthShell>
   );
 }
