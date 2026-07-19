@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { PlusIcon, MicIcon, ArrowUpIcon, BellIcon, InboxIcon, Wand2Icon } from "lucide-react";
+import { PlusIcon, MicIcon, ArrowUpIcon, BellIcon, ChevronRightIcon, InboxIcon, Wand2Icon } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
-import type { BackgroundTask, Coworker, User } from "@/lib/types";
+import { RISK_BADGE_CLASS, RISK_LABELS } from "@/lib/coworkers";
+import type { ApprovalRequestData, BackgroundTask, Coworker, User } from "@/lib/types";
 
 const IDEAS = [
   { icon: BellIcon, label: "Send me a daily briefing" },
@@ -17,11 +20,38 @@ const IDEAS = [
   { icon: Wand2Icon, label: "Customize a coworker for me" },
 ];
 
+const RISK_ORDER: Record<string, number> = { dangerous: 0, sensitive: 1, safe: 2 };
+
+const RISK_EDGE: Record<string, string> = {
+  dangerous: "border-l-destructive",
+  sensitive: "border-l-amber-500/70",
+};
+
 function greeting(): string {
   const h = new Date().getHours();
   if (h < 12) return "Morning";
   if (h < 18) return "Afternoon";
   return "Evening";
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function compactArgs(args: Record<string, unknown> | undefined): string {
+  if (!args) return "";
+  return Object.entries(args)
+    .map(([key, value]) => {
+      const rendered = typeof value === "string" ? value : JSON.stringify(value);
+      return `${key}: ${rendered.length > 48 ? `${rendered.slice(0, 45)}...` : rendered}`;
+    })
+    .join(" · ");
 }
 
 export default function HomePage() {
@@ -33,6 +63,9 @@ export default function HomePage() {
   const [mode, setMode] = useState<"chat" | "cowork">("cowork");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalRequestData[]>([]);
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -40,6 +73,7 @@ export default function HomePage() {
       router.push("/login");
       return;
     }
+    let timer: number | undefined;
     void (async () => {
       const id = await getWorkspaceId();
       setWorkspaceId(id);
@@ -55,8 +89,24 @@ export default function HomePage() {
         } catch {
           // Composer will route to coworker creation if none load.
         }
+        const loadApprovals = async () => {
+          try {
+            setApprovals(
+              await apiFetch<ApprovalRequestData[]>(
+                `/workspaces/${id}/approval-requests?status=pending`
+              )
+            );
+          } catch {
+            // The queue degrades to the plain launcher; /approvals still has everything.
+          }
+        };
+        await loadApprovals();
+        timer = window.setInterval(() => void loadApprovals(), 15_000);
       }
     })();
+    return () => {
+      if (timer !== undefined) window.clearInterval(timer);
+    };
   }, [router]);
 
   function autosize() {
@@ -99,6 +149,23 @@ export default function HomePage() {
     }
   }
 
+  async function decideApproval(item: ApprovalRequestData, approve: boolean) {
+    setApprovalBusyId(item.id);
+    setApprovalError(null);
+    try {
+      await apiFetch(`/approval-requests/${item.id}/${approve ? "approve" : "deny"}`, {
+        method: "POST",
+      });
+      setApprovals((current) => current.filter((candidate) => candidate.id !== item.id));
+    } catch (err) {
+      setApprovalError(
+        err instanceof ApiRequestError ? err.message : "Couldn't record that decision."
+      );
+    } finally {
+      setApprovalBusyId(null);
+    }
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -106,17 +173,16 @@ export default function HomePage() {
     }
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 py-16">
-      {/* Greeting */}
-      <div className="mb-8 flex flex-col items-center gap-3.5 text-center">
-        <LogoMark className="size-10" />
-        <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-[1.75rem]">
-          {greeting()}{name ? `, ${name}` : ""}
-        </h1>
-      </div>
+  const queue = [...approvals].sort(
+    (a, b) =>
+      (RISK_ORDER[a.tool_risk_classification ?? ""] ?? 3) -
+        (RISK_ORDER[b.tool_risk_classification ?? ""] ?? 3) ||
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  const hasQueue = queue.length > 0;
 
-      {/* Composer */}
+  const composer = (
+    <>
       <div className="rounded-2xl border border-border bg-card p-3 shadow-[var(--shadow-md)] transition-[border-color,box-shadow] focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10">
         <textarea
           ref={textareaRef}
@@ -179,6 +245,122 @@ export default function HomePage() {
       </p>
 
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+    </>
+  );
+
+  if (hasQueue) {
+    return (
+      <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-4 py-10">
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
+            {greeting()}{name ? `, ${name}` : ""}
+          </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Your coworkers need{" "}
+            <span className="font-medium text-foreground">
+              {queue.length} {queue.length === 1 ? "decision" : "decisions"}
+            </span>{" "}
+            before they can continue. Review each action below.
+          </p>
+        </header>
+
+        <section aria-label="Approval queue" className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Approval queue
+            </h2>
+            <span className="text-xs text-muted-foreground">Sorted by risk, then time</span>
+          </div>
+
+          {approvalError ? <p className="text-sm text-destructive">{approvalError}</p> : null}
+
+          {queue.map((item) => {
+            const risk = item.tool_risk_classification;
+            const actor = item.coworker_name ?? "Coworker";
+            const args = compactArgs(item.requested_action.arguments);
+            const chatHref = item.conversation_id
+              ? `/conversations/${item.conversation_id}`
+              : item.task_id
+                ? `/tasks/${item.task_id}`
+                : null;
+            return (
+              <article
+                key={item.id}
+                aria-label={`${actor} wants to run ${item.tool_name}`}
+                className={`flex flex-col gap-3 rounded-xl border border-l-2 bg-card p-4 ${RISK_EDGE[risk ?? ""] ?? "border-l-border"}`}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="font-medium">{actor}</span>
+                  {item.task_title ? (
+                    <span className="truncate text-xs text-muted-foreground">
+                      · {item.task_title}
+                    </span>
+                  ) : null}
+                  {risk ? (
+                    <Badge className={RISK_BADGE_CLASS[risk]}>{RISK_LABELS[risk]}</Badge>
+                  ) : null}
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                    {timeAgo(item.created_at)}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-muted/60 px-3 py-2 font-mono text-xs">
+                  <span className="text-muted-foreground">$ </span>
+                  {item.tool_name}
+                  {args ? (
+                    <div className="mt-0.5 line-clamp-2 break-all text-muted-foreground">
+                      {args}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    disabled={approvalBusyId === item.id}
+                    onClick={() => void decideApproval(item, true)}
+                    aria-label={`Approve ${item.tool_name} for ${actor}`}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={approvalBusyId === item.id}
+                    onClick={() => void decideApproval(item, false)}
+                    aria-label={`Deny ${item.tool_name} for ${actor}`}
+                  >
+                    Deny
+                  </Button>
+                  {chatHref ? (
+                    <Link
+                      href={chatHref}
+                      className="ml-auto inline-flex items-center gap-0.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Open chat
+                      <ChevronRightIcon className="size-3.5" />
+                    </Link>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
+        </section>
+
+        <div>{composer}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 py-16">
+      {/* Greeting */}
+      <div className="mb-8 flex flex-col items-center gap-3.5 text-center">
+        <LogoMark className="size-10" />
+        <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-[1.75rem]">
+          {greeting()}{name ? `, ${name}` : ""}
+        </h1>
+      </div>
+
+      {composer}
 
       {/* Ideas */}
       <div className="mt-10">
