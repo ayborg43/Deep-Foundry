@@ -212,7 +212,7 @@ export type Project = {
 
 export type Integration = {
   id: string;
-  kind: "email" | "calendar" | "slack" | "discord" | "github" | "webhook";
+  kind: "email" | "calendar" | "slack" | "discord" | "github" | "twitter" | "webhook";
   name: string;
   config: Record<string, unknown>;
   enabled: boolean;

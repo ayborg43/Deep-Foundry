@@ -158,6 +158,53 @@ def _send_email(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolR
     return ToolResult(output={"sent": count})
 
 
+def _post_tweet(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    """POST /2/tweets with the integration secret as the OAuth 2.0 user
+    access token. Dedicated executor (vs _integration_post) because the X
+    API has a fixed endpoint, an exact payload shape, and a 280-character
+    limit worth rejecting before the call spends a human approval."""
+    integration = get_enabled_integration(workspace_id=workspace_id, kind="twitter")
+    if integration is None:
+        raise ToolExecutionError("No enabled twitter integration is configured.")
+    config, secret = integration["config"], integration["secret"]
+    if not secret:
+        raise ToolExecutionError(
+            "The twitter integration requires an OAuth 2.0 user access token as its secret."
+        )
+    text = str(arguments.get("text", "")).strip()
+    if not text:
+        raise ToolExecutionError("post_tweet requires non-empty text.")
+    if len(text) > 280:
+        raise ToolExecutionError(f"post_tweet text is {len(text)} characters; the limit is 280.")
+    endpoint = config.get("endpoint_url") or "https://api.x.com/2/tweets"
+    if not str(endpoint).startswith("https://"):
+        raise ToolExecutionError("The twitter integration requires an HTTPS endpoint_url.")
+    payload: dict[str, Any] = {"text": text}
+    if arguments.get("in_reply_to_tweet_id"):
+        payload["reply"] = {"in_reply_to_tweet_id": str(arguments["in_reply_to_tweet_id"])}
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {secret}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read(2000).decode(errors="replace")
+            try:
+                tweet = json.loads(body).get("data", {})
+            except (json.JSONDecodeError, AttributeError):
+                tweet = {}
+            return ToolResult(
+                output={"status_code": response.status, "tweet_id": tweet.get("id"), "text": tweet.get("text")}
+            )
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(2000).decode(errors="replace")
+        return ToolResult(output={"status_code": exc.code, "response": detail}, error=str(exc))
+    except urllib.error.URLError as exc:
+        return ToolResult(output={"status_code": None}, error=str(exc))
+
+
 def _integration_executor(kind: str):
     return lambda arguments, *, workspace_id: _integration_post(kind, arguments, workspace_id=workspace_id)
 
@@ -206,6 +253,7 @@ _EXECUTORS = {
     "send_slack_message": _integration_executor("slack"),
     "send_discord_message": _integration_executor("discord"),
     "create_github_issue": _integration_executor("github"),
+    "post_tweet": _post_tweet,
     "send_webhook": _integration_executor("webhook"),
     "create_presentation": _artifact_executor("presentation"),
     "create_diagram": _artifact_executor("diagram"),

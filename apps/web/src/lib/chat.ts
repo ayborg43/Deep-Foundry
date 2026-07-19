@@ -117,6 +117,10 @@ export function getConversation(conversationId: string): Promise<Conversation> {
   return apiFetch<Conversation>(`/conversations/${conversationId}`);
 }
 
+export function deleteConversation(conversationId: string): Promise<void> {
+  return apiFetch<void>(`/conversations/${conversationId}`, { method: "DELETE" });
+}
+
 export function listMessages(conversationId: string): Promise<ChatMessage[]> {
   return apiFetch<ChatMessage[]>(`/conversations/${conversationId}/messages`);
 }

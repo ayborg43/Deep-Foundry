@@ -15,6 +15,7 @@ import {
   SendIcon,
   ShieldIcon,
   Volume2Icon,
+  VolumeXIcon,
   WrenchIcon,
   XIcon,
 } from "lucide-react";
@@ -264,6 +265,7 @@ export default function ConversationPage() {
   const [isDeciding, setIsDeciding] = useState(false);
   const [isHandingOff, setIsHandingOff] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [memories, setMemories] = useState<MemoryEntry[] | null>(null);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[] | null>(null);
   const statuses = useCoworkerStatuses(conversation?.workspace_id ?? null, 30_000);
@@ -287,10 +289,25 @@ export default function ConversationPage() {
   }
 
   function speakLatestReply() {
+    if (!("speechSynthesis" in window)) return;
+    // Second click while speaking = stop.
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
     const content = [...messages].reverse().find((message) => message.sender_type === "coworker" && message.content)?.content || streamingText;
-    if (!content || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(content));
+    if (!content) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
   }
+
+  // Don't keep talking after the user leaves the conversation.
+  useEffect(() => () => window.speechSynthesis?.cancel(), []);
 
   async function handleBackgroundHandoff() {
     const description = input.trim();
@@ -810,8 +827,8 @@ export default function ConversationPage() {
               <Button type="button" size="icon-sm" variant="ghost" disabled={inputDisabled || isListening} onClick={startVoiceInput} aria-pressed={isListening}>
                 <span className="sr-only">{isListening ? "Listening" : "Dictate message"}</span><MicIcon />
               </Button>
-              <Button type="button" size="icon-sm" variant="ghost" onClick={speakLatestReply} disabled={!messages.some((message) => message.sender_type === "coworker" && message.content)}>
-                <span className="sr-only">Read latest coworker reply aloud</span><Volume2Icon />
+              <Button type="button" size="icon-sm" variant="ghost" onClick={speakLatestReply} aria-pressed={isSpeaking} disabled={!isSpeaking && !messages.some((message) => message.sender_type === "coworker" && message.content)}>
+                <span className="sr-only">{isSpeaking ? "Stop reading aloud" : "Read latest coworker reply aloud"}</span>{isSpeaking ? <VolumeXIcon /> : <Volume2Icon />}
               </Button>
               <Button
                 type="button"

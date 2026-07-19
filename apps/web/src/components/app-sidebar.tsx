@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -28,6 +28,7 @@ import {
   Cpu,
   Lock,
   ChevronDown,
+  Trash2Icon,
 } from "lucide-react";
 
 import { CoworkerStatusGlyph } from "@/components/coworker-status";
@@ -36,6 +37,7 @@ import { SidebarUser } from "@/components/sidebar-user";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { apiFetch } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
+import { deleteConversation } from "@/lib/chat";
 import { useCoworkerStatuses } from "@/lib/coworker-status";
 import type { Conversation, Coworker } from "@/lib/types";
 
@@ -168,7 +170,9 @@ function CollapsibleGroup({
 
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [recents, setRecents] = useState<Conversation[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [coworkers, setCoworkers] = useState<Coworker[]>([]);
   const statuses = useCoworkerStatuses(workspaceId, 30_000);
@@ -193,6 +197,22 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       }
     })();
   }, [pathname]);
+
+  async function handleDeleteRecent(conv: Conversation) {
+    if (!window.confirm(`Delete "${conv.title || "Untitled conversation"}"? Its messages are removed permanently.`)) return;
+    setDeletingId(conv.id);
+    try {
+      await deleteConversation(conv.id);
+      setRecents((current) => current.filter((c) => c.id !== conv.id));
+      if (pathname.startsWith(`/conversations/${conv.id}`)) {
+        router.push("/conversations");
+      }
+    } catch {
+      // Row stays; the next recents refresh reflects reality.
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -296,12 +316,12 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
                   pathname === `/conversations/${conv.id}` ||
                   pathname.startsWith(`/conversations/${conv.id}/`);
                 return (
-                  <li key={conv.id}>
+                  <li key={conv.id} className="group/recent relative">
                     <Link
                       href={`/conversations/${conv.id}`}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
-                      className={`group flex min-h-8 items-center gap-2.5 rounded-md px-3 text-[0.8125rem] transition-colors ${
+                      className={`group flex min-h-8 items-center gap-2.5 rounded-md px-3 pr-8 text-[0.8125rem] transition-colors ${
                         active
                           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                           : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
@@ -310,6 +330,15 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
                       <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground/60 group-hover:text-foreground/70" />
                       <span className="truncate">{conv.title || "Untitled conversation"}</span>
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteRecent(conv)}
+                      disabled={deletingId === conv.id}
+                      aria-label={`Delete conversation ${conv.title || "Untitled conversation"}`}
+                      className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground/60 opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/recent:opacity-100 disabled:opacity-40"
+                    >
+                      <Trash2Icon className="size-3.5" />
+                    </button>
                   </li>
                 );
               })}

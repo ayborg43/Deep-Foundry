@@ -63,7 +63,7 @@ class ToolCatalogTests(CoworkerTestBase):
             {
                 "web_search", "read_file", "write_file", "execute_code",
                 "send_email", "create_calendar_event", "send_slack_message",
-                "send_discord_message", "create_github_issue", "send_webhook",
+                "send_discord_message", "create_github_issue", "post_tweet", "send_webhook",
                 "create_presentation", "create_diagram", "record_video_analysis",
                 "propose_capability",
             },

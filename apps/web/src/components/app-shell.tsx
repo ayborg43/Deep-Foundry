@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MenuIcon, XIcon, LogOutIcon } from "lucide-react";
+import { MenuIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -12,8 +12,8 @@ import { NotificationBell } from "@/components/notification-bell";
 import { Wordmark } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { apiFetch } from "@/lib/api";
-import { clearTokens, getTokens, getWorkspaceId } from "@/lib/auth";
-import type { User, Workspace } from "@/lib/types";
+import { getTokens } from "@/lib/auth";
+import type { User } from "@/lib/types";
 
 // The marketing home gets the slim topbar (logo + Log in / Get started nav).
 function isMarketingRoute(pathname: string): boolean {
@@ -71,11 +71,9 @@ function routeTitle(pathname: string): string {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isAuthed, setIsAuthed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [workspaceName, setWorkspaceName] = useState<string>("");
 
   useEffect(() => {
     // localStorage is client-only, so auth is resolved post-mount and
@@ -91,37 +89,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       try {
         setUser(await apiFetch<User>("/me"));
       } catch {
-        // Footer falls back to a generic label without /me.
-      }
-      try {
-        const id = await getWorkspaceId();
-        if (id) {
-          const ws = await apiFetch<Workspace>(`/workspaces/${id}`);
-          setWorkspaceName(ws.name);
-        }
-      } catch {
-        // Workspace label is optional.
+        // The mobile header falls back to a generic label without /me.
       }
     })();
   }, [isAuthed]);
-
-  async function handleLogout() {
-    const tokens = getTokens();
-    try {
-      if (tokens?.refresh) {
-        await apiFetch("/auth/logout", {
-          method: "POST",
-          body: JSON.stringify({ refresh: tokens.refresh }),
-        });
-      }
-    } catch {
-      // Best-effort: clear the local session regardless of API outcome.
-    } finally {
-      clearTokens();
-      setIsAuthed(false);
-      router.push("/login");
-    }
-  }
 
   // Auth pages render full-bleed with no shared chrome at all.
   if (isAuthRoute(pathname)) {
@@ -173,32 +144,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // The signed-in footer (theme row + identity + log out) is rendered by
+  // SidebarUser inside AppSidebar — the shell adds no footer of its own,
+  // or the sidebar ends up with two theme toggles and two account rows.
   const accountLabel = user?.display_name || user?.email?.split("@")[0] || "Account";
   const accountInitial = accountLabel.charAt(0).toUpperCase();
-  const accountFooter = (
-    <div className="flex flex-col gap-2 border-t border-sidebar-border p-2.5">
-      <ThemeToggle />
-      <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
-          {accountInitial}
-        </span>
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-medium leading-tight">{accountLabel}</span>
-          {workspaceName ? (
-            <span className="truncate text-xs text-muted-foreground leading-tight">{workspaceName}</span>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          aria-label="Log out"
-          className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
-        >
-          <LogOutIcon className="size-4" />
-        </button>
-      </div>
-    </div>
-  );
 
   // App pages: fixed sidebar (desktop) + slide-over (mobile) + topbar.
   return (
@@ -206,7 +156,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="hidden h-svh w-[266px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
         <AppSidebar />
-        {isAuthed ? accountFooter : null}
       </aside>
 
       {/* Mobile slide-over */}
@@ -225,7 +174,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Button>
             </div>
             <AppSidebar onNavigate={() => setMobileOpen(false)} />
-            {isAuthed ? accountFooter : null}
           </div>
         </div>
       ) : null}

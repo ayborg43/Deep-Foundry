@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MessageSquareIcon, PlusIcon } from "lucide-react";
+import { MessageSquareIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
+import { deleteConversation } from "@/lib/chat";
 import type { Conversation } from "@/lib/types";
 
 export default function ConversationsPage() {
@@ -18,6 +19,21 @@ export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(conversation: Conversation) {
+    if (!window.confirm(`Delete "${conversation.title || "Untitled conversation"}"? Its messages are removed permanently.`)) return;
+    setDeletingId(conversation.id);
+    setError(null);
+    try {
+      await deleteConversation(conversation.id);
+      setConversations((current) => current.filter((c) => c.id !== conversation.id));
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Couldn't delete that conversation.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     if (!getTokens()) {
@@ -105,6 +121,20 @@ export default function ConversationsPage() {
                         {new Date(conversation.created_at).toLocaleString()}
                       </p>
                     </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={deletingId === conversation.id}
+                      aria-label={`Delete conversation ${conversation.title || "Untitled conversation"}`}
+                      className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/row:opacity-100"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void handleDelete(conversation);
+                      }}
+                    >
+                      <Trash2Icon />
+                    </Button>
                   </CardContent>
                 </Card>
               </Link>

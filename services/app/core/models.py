@@ -924,6 +924,7 @@ class Integration(UUIDPrimaryKeyModel):
         SLACK = "slack", "Slack"
         DISCORD = "discord", "Discord"
         GITHUB = "github", "GitHub"
+        TWITTER = "twitter", "Twitter / X"
         WEBHOOK = "webhook", "Generic webhook"
 
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="integrations")

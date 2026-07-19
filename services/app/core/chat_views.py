@@ -126,6 +126,16 @@ class ConversationDetailView(APIView):
         conversation = _get_conversation_for_member(request.user, conversation_id)
         return Response(ConversationSerializer(conversation).data)
 
+    def delete(self, request: Request, conversation_id: str) -> Response:
+        conversation = _get_conversation_for_member(request.user, conversation_id)
+        workspace_id = conversation.workspace_id
+        conversation.delete()  # participants and messages CASCADE with it
+        write_audit_log(
+            actor_type="user", actor_id=request.user.id, action="conversation.delete",
+            resource_type="conversation", resource_id=conversation_id, workspace_id=workspace_id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class MessageListSendView(APIView):
     """GET lists messages; POST creates the user's message and streams the
