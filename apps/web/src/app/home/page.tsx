@@ -14,7 +14,7 @@ import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
 import { useCoworkerStatuses } from "@/lib/coworker-status";
 import { RISK_BADGE_CLASS, RISK_LABELS } from "@/lib/coworkers";
-import type { ApprovalRequestData, BackgroundTask, Coworker, User } from "@/lib/types";
+import type { AgentTeam, ApprovalRequestData, BackgroundTask, Coworker, User } from "@/lib/types";
 
 const IDEAS = [
   { icon: BellIcon, label: "Send me a daily briefing" },
@@ -29,6 +29,19 @@ type ApprovalStats = {
   pending_dangerous: number;
   executed_today: number;
   auto_executed_today: number;
+};
+
+// Shape returned by /team-suggestions and accepted by /provision-team.
+type TeamSpec = {
+  team_name: string;
+  collaboration_pattern: string;
+  coworkers: {
+    name: string;
+    team_role: string;
+    custom_role_label?: string;
+    role_description: string;
+    tools: string[];
+  }[];
 };
 
 const RISK_EDGE: Record<string, string> = {
@@ -68,9 +81,11 @@ export default function HomePage() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [name, setName] = useState<string>("");
   const [coworkers, setCoworkers] = useState<Coworker[]>([]);
+  const [teams, setTeams] = useState<AgentTeam[]>([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"chat" | "cowork">("cowork");
   const [busy, setBusy] = useState(false);
+  const [busyNote, setBusyNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequestData[]>([]);
   const [approvalStats, setApprovalStats] = useState<ApprovalStats | null>(null);
@@ -100,7 +115,12 @@ export default function HomePage() {
         try {
           setCoworkers(await apiFetch<Coworker[]>(`/workspaces/${id}/coworkers`));
         } catch {
-          // Composer will route to coworker creation if none load.
+          // With no roster, the composer designs a team on first submit.
+        }
+        try {
+          setTeams(await apiFetch<AgentTeam[]>(`/agent-teams?workspace_id=${id}`));
+        } catch {
+          // Cowork mode falls back to a solo background task.
         }
         const loadApprovals = async () => {
           try {
@@ -138,34 +158,84 @@ export default function HomePage() {
 
   async function submit(text: string) {
     const content = text.trim();
-    if (!content || busy) return;
-    if (!workspaceId || coworkers.length === 0) {
-      router.push("/coworkers/new");
-      return;
-    }
+    if (!content || busy || !workspaceId) return;
     setBusy(true);
     setError(null);
-    const coworkerId = coworkers[0].id;
     const title = content.length > 80 ? `${content.slice(0, 77)}...` : content;
     try {
-      if (mode === "chat") {
-        const conv = await createConversation(workspaceId, coworkerId, title);
-        router.push(`/conversations/${conv.id}?draft=${encodeURIComponent(content)}`);
-      } else {
+      let roster = coworkers;
+      let rosterTeams = teams;
+
+      // Blank workspace: have the model design a team from the request
+      // itself, provision it, then carry on with the original ask.
+      if (roster.length === 0) {
+        setBusyNote("Designing your team from this request...");
+        const spec = await apiFetch<TeamSpec>(`/workspaces/${workspaceId}/team-suggestions`, {
+          method: "POST",
+          body: JSON.stringify({ description: content }),
+        });
+        setBusyNote(
+          `Hiring ${spec.coworkers.length} coworker${spec.coworkers.length === 1 ? "" : "s"}` +
+            (spec.team_name ? ` for “${spec.team_name}”...` : "...")
+        );
+        await apiFetch(`/workspaces/${workspaceId}/provision-team`, {
+          method: "POST",
+          body: JSON.stringify(spec),
+        });
+        roster = await apiFetch<Coworker[]>(`/workspaces/${workspaceId}/coworkers`);
+        setCoworkers(roster);
+        rosterTeams = await apiFetch<AgentTeam[]>(`/agent-teams?workspace_id=${workspaceId}`).catch(
+          () => [] as AgentTeam[]
+        );
+        setTeams(rosterTeams);
+        if (roster.length === 0) {
+          throw new Error("No coworkers could be created — try Coworkers → New coworker.");
+        }
+      }
+
+      if (mode === "cowork") {
+        // With a team in the workspace, the objective goes to the team;
+        // solo workspaces hand off a single background task as before.
+        const team = rosterTeams[0];
+        if (team) {
+          setBusyNote(`Handing this to ${team.name}...`);
+          await apiFetch(`/agent-teams/${team.id}/run`, {
+            method: "POST",
+            body: JSON.stringify({ objective: content }),
+          });
+          router.push("/tasks");
+          return;
+        }
         const task = await apiFetch<BackgroundTask>("/tasks", {
           method: "POST",
           body: JSON.stringify({
             workspace_id: workspaceId,
-            coworker_id: coworkerId,
+            coworker_id: roster[0].id,
             title,
             description: content,
           }),
         });
         router.push(`/tasks/${task.id}`);
+      } else {
+        // Chat prefers a team manager — the coworker holding the
+        // orchestration tools, able to report on and steer the teams.
+        const managerId = rosterTeams
+          .flatMap((team) => team.members)
+          .find((member) => member.role === "manager")?.coworker_id;
+        const coworkerId = managerId ?? roster[0].id;
+        const conv = await createConversation(workspaceId, coworkerId, title);
+        router.push(`/conversations/${conv.id}?draft=${encodeURIComponent(content)}`);
       }
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't start that. Try again.");
+      setError(
+        err instanceof ApiRequestError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Couldn't start that. Try again."
+      );
       setBusy(false);
+      setBusyNote(null);
     }
   }
 
@@ -308,11 +378,21 @@ export default function HomePage() {
       </div>
 
       <p className="mt-2 px-1 text-xs text-muted-foreground">
-        {mode === "cowork"
-          ? "Runs in the background. Risky actions still ask you first."
-          : "A live conversation with your coworker."}
+        {coworkers.length === 0
+          ? "No coworkers yet — describe what you need and your team is designed, hired, and put to work automatically."
+          : mode === "cowork"
+            ? teams.length > 0
+              ? `Runs in the background — your objective goes to ${teams[0].name}. Risky actions still ask you first.`
+              : "Runs in the background. Risky actions still ask you first."
+            : "A live conversation with your coworker. Ask what your teams are doing, or have them take on new work."}
       </p>
 
+      {busy && busyNote ? (
+        <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground" role="status">
+          <span className="size-2 animate-pulse rounded-full bg-primary" />
+          {busyNote}
+        </p>
+      ) : null}
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
     </>
   );

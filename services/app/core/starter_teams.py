@@ -23,6 +23,15 @@ from core.v2_services import create_agent_team
 # (or prompt-injected model output) from flooding a workspace.
 MAX_TEAM_SIZE = 6
 
+# Attached automatically to every provisioned manager (and to a solo
+# coworker): lets the user run the workspace from chat — see what teams are
+# doing, start runs, hire coworkers, assign tasks, schedule workflows. The
+# mutating ones are risk-classified sensitive, so they stay approval-gated.
+ORCHESTRATION_TOOLS = (
+    "workspace_status", "create_coworker", "create_agent_team",
+    "run_agent_team", "create_task", "schedule_workflow",
+)
+
 # Curated blueprints. Tools must be names seeded in the platform Tool catalog;
 # unknown names are skipped at attach time rather than failing the provision.
 TEMPLATES: dict[str, dict[str, Any]] = {
@@ -244,7 +253,12 @@ def provision_team(
                 model_binding=dict(DEFAULT_MODEL_BINDING),
                 created_by=created_by,
             )
-            for tool_name in member["tools"]:
+            tool_names = list(member["tools"])
+            # Managers (and a solo coworker) also get the orchestration
+            # tools, so the workspace can be driven from a chat with them.
+            if member["team_role"] == AgentTeamMember.Role.MANAGER or len(cleaned["coworkers"]) == 1:
+                tool_names += [name for name in ORCHESTRATION_TOOLS if name not in tool_names]
+            for tool_name in tool_names:
                 tool = tools_by_name.get(tool_name)
                 if tool is not None:
                     coworker.tool_attachments.create(tool=tool)

@@ -528,3 +528,270 @@ def write_audit_log(
         resource_id=resource_id,
         metadata=metadata or {},
     )
+
+
+# --- Workspace orchestration (chat-driven control) ---------------------------
+# Executors behind the orchestration tools (ai.tool_executor): a coworker in
+# chat can inspect the workspace and — behind the normal approval gate —
+# create coworkers/teams, start runs, assign tasks, and schedule workflows.
+# Mutations act as the workspace owner: a human approved the tool call, and
+# every path below writes its own audit row. Lookups accept a name or a UUID
+# so a model can say "run the Launch team" without knowing ids.
+
+
+class OrchestrationError(Exception):
+    """A lookup or spec problem the model can read and correct."""
+
+
+def _orchestration_workspace(workspace_id: UUID | str):
+    from core.models import Workspace
+
+    workspace = Workspace.objects.filter(id=workspace_id).select_related("owner").first()
+    if workspace is None:
+        raise OrchestrationError(f"No workspace {workspace_id}.")
+    return workspace
+
+
+def _find_by_name_or_id(queryset, ref: str, *, kind: str):
+    ref = str(ref).strip()
+    if not ref:
+        raise OrchestrationError(f"A {kind} name or id is required.")
+    try:
+        UUID(ref)
+        row = queryset.filter(id=ref).first()
+    except ValueError:
+        row = queryset.filter(name__iexact=ref).first() or queryset.filter(
+            name__icontains=ref
+        ).first()
+    if row is None:
+        raise OrchestrationError(f"No {kind} matching {ref!r} in this workspace.")
+    return row
+
+
+def get_workspace_overview(*, workspace_id: UUID | str) -> dict[str, Any]:
+    """Read-only snapshot: coworkers, teams with their latest run, recent
+    tasks, and pending approvals — what chat needs to answer "what is
+    everyone doing?"."""
+    from core.models import AgentTeam
+
+    def _clip(text: str | None, limit: int = 600) -> str:
+        text = (text or "").strip()
+        return text if len(text) <= limit else f"{text[: limit - 3]}..."
+
+    coworkers = [
+        {"id": str(row.id), "name": row.name, "status": row.status}
+        for row in Coworker.objects.filter(workspace_id=workspace_id).order_by("name")
+    ]
+    teams = []
+    for team in AgentTeam.objects.filter(workspace_id=workspace_id).select_related(
+        "current_version"
+    ):
+        latest = team.runs.order_by("-started_at").first()
+        teams.append({
+            "id": str(team.id),
+            "name": team.name,
+            "collaboration_pattern": team.collaboration_pattern,
+            "members": [
+                {"name": member.coworker.name, "role": member.custom_role_label or member.role}
+                for member in (
+                    team.current_version.members.select_related("coworker")
+                    if team.current_version
+                    else []
+                )
+            ],
+            "latest_run": {
+                "id": str(latest.id),
+                "objective": _clip(latest.objective, 200),
+                "status": latest.status,
+                "result": _clip(latest.result),
+            } if latest else None,
+        })
+    tasks = [
+        {
+            "id": str(task.id), "title": task.title, "status": task.status,
+            "coworker": task.coworker.name, "result": _clip(task.result),
+        }
+        for task in Task.objects.filter(workspace_id=workspace_id)
+        .select_related("coworker")
+        .order_by("-created_at")[:15]
+    ]
+    pending_approvals = ApprovalRequestModel.objects.filter(
+        coworker__workspace_id=workspace_id, status="pending"
+    ).count()
+    return {
+        "coworkers": coworkers,
+        "teams": teams,
+        "recent_tasks": tasks,
+        "pending_approvals": pending_approvals,
+    }
+
+
+def orchestrate_create_coworker(
+    *, workspace_id: UUID | str, name: str, role_description: str,
+    tools: list[str] | None = None,
+) -> dict[str, Any]:
+    from core.coworkers import create_coworker
+    from core.provisioning import DEFAULT_MODEL_BINDING
+
+    workspace = _orchestration_workspace(workspace_id)
+    name = str(name or "").strip()
+    role_description = str(role_description or "").strip()
+    if not name or not role_description:
+        raise OrchestrationError("create_coworker requires a name and a role_description.")
+    coworker = create_coworker(
+        workspace=workspace, owner=workspace.owner, owner_type=Coworker.OwnerType.USER,
+        name=name[:255], role_description=role_description,
+        model_binding=dict(DEFAULT_MODEL_BINDING), created_by=workspace.owner,
+    )
+    attached = []
+    for tool_name in tools or []:
+        tool = Tool.objects.filter(name=str(tool_name).strip()).first()
+        if tool is not None:
+            CoworkerToolAttachment.objects.get_or_create(coworker=coworker, tool=tool)
+            attached.append(tool.name)
+    write_audit_log(
+        actor_type="user", actor_id=workspace.owner_id, action="coworker.create",
+        resource_type="coworker", resource_id=coworker.id, workspace_id=workspace.id,
+        metadata={"via": "orchestration_tool"},
+    )
+    return {"coworker_id": str(coworker.id), "name": coworker.name, "tools": attached}
+
+
+def orchestrate_create_team(
+    *, workspace_id: UUID | str, name: str, collaboration_pattern: str,
+    members: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from core.v2_services import create_agent_team
+
+    workspace = _orchestration_workspace(workspace_id)
+    if not isinstance(members, list) or not members:
+        raise OrchestrationError(
+            'create_agent_team requires members: [{"coworker": name-or-id, "role": role}].'
+        )
+    payload_members = []
+    for member in members:
+        if not isinstance(member, dict):
+            raise OrchestrationError("Each member must be an object with coworker and role.")
+        coworker = _find_by_name_or_id(
+            workspace.coworkers.filter(status="active"),
+            member.get("coworker") or member.get("coworker_id") or member.get("name") or "",
+            kind="coworker",
+        )
+        payload_members.append({
+            "coworker_id": str(coworker.id),
+            "role": str(member.get("role", "custom")).strip().lower() or "custom",
+            "custom_role_label": str(member.get("custom_role_label", ""))[:100],
+        })
+    team = create_agent_team(
+        workspace=workspace, user=workspace.owner,
+        payload={
+            "name": str(name or "").strip()[:255] or "Untitled team",
+            "collaboration_pattern": str(collaboration_pattern or "").strip().lower()
+            or "manager_delegate",
+            "members": payload_members,
+        },
+    )
+    return {"team_id": str(team.id), "name": team.name}
+
+
+def orchestrate_run_team(
+    *, workspace_id: UUID | str, team: str, objective: str
+) -> dict[str, Any]:
+    from core.models import AgentTeam
+    from core.v2_services import start_agent_team_run
+
+    workspace = _orchestration_workspace(workspace_id)
+    row = _find_by_name_or_id(
+        AgentTeam.objects.filter(workspace_id=workspace.id), team, kind="agent team"
+    )
+    run = start_agent_team_run(row, user=workspace.owner, objective=str(objective or ""))
+    return {"run_id": str(run.id), "team": row.name, "status": run.status}
+
+
+def orchestrate_create_task(
+    *, workspace_id: UUID | str, coworker: str, title: str, description: str
+) -> dict[str, Any]:
+    workspace = _orchestration_workspace(workspace_id)
+    assignee = _find_by_name_or_id(
+        workspace.coworkers.filter(status="active"), coworker, kind="coworker"
+    )
+    title = str(title or "").strip()
+    description = str(description or "").strip()
+    if not title or not description:
+        raise OrchestrationError("create_task requires a title and a description.")
+    with transaction.atomic():
+        task = Task.objects.create(
+            workspace=workspace, coworker=assignee,
+            created_by_type=Task.CreatedByType.USER, created_by_id=workspace.owner_id,
+            title=title[:255], description=description,
+        )
+        write_audit_log(
+            actor_type="user", actor_id=workspace.owner_id, action="task.create",
+            resource_type="task", resource_id=task.id, workspace_id=workspace.id,
+            metadata={"via": "orchestration_tool"},
+        )
+        from worker.tasks import execute_background_task
+
+        transaction.on_commit(lambda: execute_background_task.delay(str(task.id)))
+    return {"task_id": str(task.id), "coworker": assignee.name, "status": task.status}
+
+
+def orchestrate_schedule_workflow(
+    *, workspace_id: UUID | str, name: str, schedule_cron: str,
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from datetime import datetime as dt
+
+    from croniter import croniter
+
+    from core.models import WorkflowTrigger
+    from core.v2_services import create_workflow
+
+    workspace = _orchestration_workspace(workspace_id)
+    if not isinstance(steps, list) or not steps:
+        raise OrchestrationError(
+            "schedule_workflow requires steps: "
+            '[{"coworker": name-or-id, "title": ..., "instructions": ...}].'
+        )
+    definition_steps = []
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            raise OrchestrationError("Each step must be an object.")
+        assignee = _find_by_name_or_id(
+            workspace.coworkers.filter(status="active"),
+            step.get("coworker") or step.get("coworker_id") or "",
+            kind="coworker",
+        )
+        instructions = str(step.get("instructions", "")).strip()
+        if not instructions:
+            raise OrchestrationError(f"Step {index + 1} needs instructions.")
+        definition_steps.append({
+            "type": "coworker_action",
+            "title": str(step.get("title", "")).strip()[:255] or f"Step {index + 1}",
+            "coworker_id": str(assignee.id),
+            "instructions": instructions,
+        })
+    # Every scheduled workflow ends at a human checkpoint — orchestration
+    # must not remove the human from recurring work.
+    definition_steps.append({"type": "human_checkpoint", "title": "Review and approve"})
+    workflow = create_workflow(
+        workspace=workspace, user=workspace.owner,
+        name=str(name or "").strip()[:255] or "Scheduled workflow",
+        definition={"steps": definition_steps},
+    )
+    schedule_cron = str(schedule_cron or "").strip()
+    trigger = None
+    if schedule_cron:
+        try:
+            next_run_at = croniter(schedule_cron, timezone.now()).get_next(dt)
+        except (ValueError, KeyError) as exc:
+            raise OrchestrationError(f"Invalid cron expression {schedule_cron!r}.") from exc
+        trigger = WorkflowTrigger.objects.create(
+            workflow=workflow, trigger_type=WorkflowTrigger.TriggerType.SCHEDULED,
+            schedule_cron=schedule_cron, enabled=True, next_run_at=next_run_at,
+        )
+    return {
+        "workflow_id": str(workflow.id), "name": workflow.name,
+        "scheduled": bool(trigger), "schedule_cron": schedule_cron or None,
+        "steps": len(definition_steps),
+    }

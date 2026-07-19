@@ -66,6 +66,8 @@ class ToolCatalogTests(CoworkerTestBase):
                 "send_discord_message", "create_github_issue", "post_tweet", "send_webhook",
                 "create_presentation", "create_diagram", "record_video_analysis",
                 "propose_capability",
+                "workspace_status", "create_coworker", "create_agent_team",
+                "run_agent_team", "create_task", "schedule_workflow",
             },
         )
 

@@ -28,7 +28,17 @@ from django.core.mail import send_mail
 
 from ai.sandbox import SandboxError, run_python
 from ai.web_search import WebSearchError, search_web
-from core.interface import create_workspace_artifact, get_enabled_integration
+from core.interface import (
+    OrchestrationError,
+    create_workspace_artifact,
+    get_enabled_integration,
+    get_workspace_overview,
+    orchestrate_create_coworker,
+    orchestrate_create_task,
+    orchestrate_create_team,
+    orchestrate_run_team,
+    orchestrate_schedule_workflow,
+)
 
 
 class ToolExecutionError(Exception):
@@ -243,6 +253,29 @@ def _propose_capability(arguments: dict[str, Any], *, workspace_id: UUID | str) 
     return ToolResult(output={"proposal_id": str(proposal.id), "status": proposal.status})
 
 
+# --- Workspace orchestration tools ------------------------------------------
+# Thin wrappers over core.interface orchestration functions so a coworker in
+# chat can report on and (approval-gated) reshape the workspace. Spec problems
+# surface as ToolExecutionError text the model can read and correct.
+
+
+def _orchestration_executor(fn, required: tuple[str, ...]):
+    def execute(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+        from rest_framework.exceptions import PermissionDenied, ValidationError
+
+        kwargs = {key: arguments.get(key) for key in required}
+        try:
+            return ToolResult(output=fn(workspace_id=workspace_id, **kwargs))
+        except (OrchestrationError, ValidationError, PermissionDenied) as exc:
+            raise ToolExecutionError(str(exc)) from exc
+
+    return execute
+
+
+def _workspace_status(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    return ToolResult(output=get_workspace_overview(workspace_id=workspace_id))
+
+
 _EXECUTORS = {
     "web_search": _web_search,
     "read_file": _read_file,
@@ -259,6 +292,20 @@ _EXECUTORS = {
     "create_diagram": _artifact_executor("diagram"),
     "record_video_analysis": _artifact_executor("video_analysis"),
     "propose_capability": _propose_capability,
+    "workspace_status": _workspace_status,
+    "create_coworker": _orchestration_executor(
+        orchestrate_create_coworker, ("name", "role_description", "tools")
+    ),
+    "create_agent_team": _orchestration_executor(
+        orchestrate_create_team, ("name", "collaboration_pattern", "members")
+    ),
+    "run_agent_team": _orchestration_executor(orchestrate_run_team, ("team", "objective")),
+    "create_task": _orchestration_executor(
+        orchestrate_create_task, ("coworker", "title", "description")
+    ),
+    "schedule_workflow": _orchestration_executor(
+        orchestrate_schedule_workflow, ("name", "schedule_cron", "steps")
+    ),
 }
 
 

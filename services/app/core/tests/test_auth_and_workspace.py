@@ -48,25 +48,17 @@ class RegisterTests(APITestCase):
         membership = WorkspaceMember.objects.get(workspace=workspace, user=user)
         self.assertEqual(membership.role, WorkspaceMember.Role.OWNER)
 
-    def test_register_seeds_a_default_coworker(self):
-        """A first-time user should land with a usable coworker, not an empty
-        workspace that forces them through the create-coworker form."""
+    def test_register_starts_with_a_blank_workspace(self):
+        """New workspaces are intentionally empty: the user creates their
+        first coworker (manually, from a template, or by describing what
+        they need in the Home composer)."""
         self.client.post(
             reverse("auth-register"),
             {"email": "seed@example.com", "password": VALID_PASSWORD, "display_name": "Seed"},
         )
         user = User.objects.get(email="seed@example.com")
         workspace = Workspace.objects.get(owner=user)
-
-        coworkers = Coworker.objects.filter(workspace=workspace)
-        self.assertEqual(coworkers.count(), 1)
-        coworker = coworkers.get()
-        self.assertEqual(coworker.owner_type, Coworker.OwnerType.USER)
-        self.assertEqual(coworker.owner_id, user.id)
-        # Ready to use: an active version 1 with a concrete model binding.
-        self.assertIsNotNone(coworker.current_version)
-        self.assertEqual(coworker.current_version.version_number, 1)
-        self.assertEqual(coworker.current_version.model_binding, {"primary": "deepseek-v4-flash"})
+        self.assertEqual(Coworker.objects.filter(workspace=workspace).count(), 0)
 
     def test_register_duplicate_email_fails(self):
         User.objects.create_user(email="dup@example.com", password=VALID_PASSWORD)
@@ -169,33 +161,6 @@ class DeleteAccountTests(APITestCase):
         self.assertFalse(User.objects.filter(id=self.user.id).exists())
         self.assertEqual(AgentTeamRun.objects.count(), 0)
         self.assertEqual(Coworker.objects.filter(workspace=self.workspace).count(), 0)
-
-
-class BackfillDefaultCoworkersTests(APITestCase):
-    def test_seeds_only_coworker_less_workspaces(self):
-        from django.core.management import call_command
-
-        from core.models import Coworker
-
-        owner = User.objects.create_user(email="empty@example.com", password=VALID_PASSWORD)
-        empty = Workspace.objects.create(
-            name="Empty", type=Workspace.WorkspaceType.PERSONAL, owner=owner
-        )
-        WorkspaceMember.objects.create(
-            workspace=empty, user=owner, role=WorkspaceMember.Role.OWNER
-        )
-        # A separately-provisioned workspace already has its default coworker.
-        seeded = provision_personal_workspace(
-            User.objects.create_user(email="seeded@example.com", password=VALID_PASSWORD)
-        )
-
-        self.assertEqual(Coworker.objects.filter(workspace=empty).count(), 0)
-        call_command("backfill_default_coworkers")
-        self.assertEqual(Coworker.objects.filter(workspace=empty).count(), 1)
-        # Idempotent, and it didn't double up the already-seeded workspace.
-        call_command("backfill_default_coworkers")
-        self.assertEqual(Coworker.objects.filter(workspace=empty).count(), 1)
-        self.assertEqual(Coworker.objects.filter(workspace=seeded).count(), 1)
 
 
 class LoginTests(APITestCase):
