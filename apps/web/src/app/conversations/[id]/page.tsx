@@ -3,7 +3,21 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { ArrowLeftIcon, BotIcon, ClockIcon, MicIcon, SendIcon, Volume2Icon, WrenchIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  ArrowLeftIcon,
+  BotIcon,
+  BrainIcon,
+  CheckIcon,
+  ClockIcon,
+  CpuIcon,
+  MicIcon,
+  SendIcon,
+  ShieldIcon,
+  Volume2Icon,
+  WrenchIcon,
+  XIcon,
+} from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +41,8 @@ import type {
   ChatMessage,
   Conversation,
   Coworker,
+  KnowledgeBase,
+  MemoryEntry,
   RiskClassification,
   Tool,
   ToolCallRequest,
@@ -36,6 +52,8 @@ type LiveToolCall = {
   toolName: string;
   arguments: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
+  startedAt: number;
+  durationMs: number | null;
 };
 
 type PendingApproval = {
@@ -49,18 +67,35 @@ function riskOf(toolsByName: Map<string, Tool>, name: string): RiskClassificatio
   return toolsByName.get(name)?.risk_classification ?? null;
 }
 
+function EntryLines({ entries }: { entries: Record<string, unknown> }) {
+  return (
+    <>
+      {Object.entries(entries).map(([key, value]) => (
+        <div key={key} className="break-all">
+          <span className="text-muted-foreground">{key}: </span>
+          {typeof value === "string" ? `"${value}"` : JSON.stringify(value)}
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ToolCallCard({
   toolName,
   args,
   result,
   risk,
+  autoRun,
   pending,
+  durationMs,
 }: {
   toolName: string;
   args: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
   risk: RiskClassification | null;
+  autoRun: boolean;
   pending: boolean;
+  durationMs?: number | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
@@ -76,34 +111,34 @@ function ToolCallCard({
         aria-label={`${toolName} tool call, ${pending ? "running" : "complete"}. ${expanded ? "Hide" : "Show"} details`}
       >
         <WrenchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="font-medium">{toolName}</span>
+        <span className="font-mono font-medium">{toolName}</span>
         {risk ? (
-          <Badge className={RISK_BADGE_CLASS[risk]}>{RISK_LABELS[risk]}</Badge>
+          <Badge className={RISK_BADGE_CLASS[risk]}>
+            {RISK_LABELS[risk]}
+            {autoRun ? " · auto-run" : ""}
+          </Badge>
         ) : null}
         <span className="text-muted-foreground">
-          {pending ? "Running..." : "Done"}
+          {pending ? "Running..." : null}
         </span>
-        <span className="ml-auto text-muted-foreground">
+        <span className="ml-auto flex shrink-0 items-center gap-2 text-muted-foreground">
+          {!pending && durationMs != null ? <span className="font-mono">{durationMs}ms</span> : null}
           {expanded ? "Hide" : "Details"}
         </span>
       </button>
       {expanded ? (
-        <div id={detailsId} className="flex flex-col gap-2 border-t pt-2">
-          {args ? (
-            <div>
-              <p className="mb-0.5 font-medium text-muted-foreground">Input</p>
-              <pre className="overflow-x-auto rounded bg-background p-2">
-                {JSON.stringify(args, null, 2)}
-              </pre>
-            </div>
+        <div id={detailsId} className="flex flex-col gap-1 border-t pt-2 font-mono">
+          {args && Object.keys(args).length > 0 ? (
+            <>
+              <p className="text-muted-foreground">{"// request"}</p>
+              <EntryLines entries={args} />
+            </>
           ) : null}
           {result ? (
-            <div>
-              <p className="mb-0.5 font-medium text-muted-foreground">Output</p>
-              <pre className="overflow-x-auto rounded bg-background p-2">
-                {JSON.stringify(result, null, 2)}
-              </pre>
-            </div>
+            <>
+              <p className="mt-1 text-muted-foreground">{"// result"}</p>
+              <EntryLines entries={result} />
+            </>
           ) : null}
         </div>
       ) : null}
@@ -111,7 +146,13 @@ function ToolCallCard({
   );
 }
 
+const APPROVAL_TINT: Record<string, string> = {
+  dangerous: "border-destructive/40 bg-destructive/5",
+  sensitive: "border-amber-500/40 bg-amber-500/5 dark:border-amber-400/30",
+};
+
 function ApprovalCard({
+  coworkerName,
   toolName,
   args,
   risk,
@@ -119,6 +160,7 @@ function ApprovalCard({
   onApprove,
   onDeny,
 }: {
+  coworkerName: string;
   toolName: string;
   args: Record<string, unknown>;
   risk: RiskClassification | null;
@@ -127,32 +169,49 @@ function ApprovalCard({
   onDeny: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-3 text-sm dark:border-amber-400/30" role="region" aria-label={`Approval required for ${toolName}`}>
+    <div
+      className={`flex flex-col gap-3 rounded-xl border px-4 py-3.5 text-sm ${APPROVAL_TINT[risk ?? ""] ?? "bg-muted/40"}`}
+      role="region"
+      aria-label={`Approval required for ${toolName}`}
+    >
       <div className="flex items-center gap-2">
-        <WrenchIcon className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <span className="font-medium">Wants to run {toolName}</span>
+        <AlertTriangleIcon className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span className="font-medium">Approval required</span>
         {risk ? (
           <Badge className={RISK_BADGE_CLASS[risk]}>{RISK_LABELS[risk]}</Badge>
         ) : null}
       </div>
-      <pre className="overflow-x-auto rounded bg-background p-2 text-xs" tabIndex={0} aria-label={`${toolName} arguments`}>
-        {JSON.stringify(args, null, 2)}
-      </pre>
+      <p className="font-heading font-semibold">
+        {coworkerName} wants to run {toolName}
+      </p>
+      <div
+        className="flex flex-col gap-0.5 rounded-lg bg-background/70 px-3 py-2 font-mono text-xs"
+        tabIndex={0}
+        aria-label={`${toolName} arguments`}
+      >
+        <div>
+          <span className="text-muted-foreground">tool </span>
+          {toolName}
+        </div>
+        <EntryLines entries={args} />
+      </div>
       <p className="text-xs text-muted-foreground">
         The conversation is paused until you approve or deny this action.
       </p>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" disabled={isDeciding} onClick={onApprove} aria-label={`Approve ${toolName}`}>
-          {isDeciding ? "Working..." : "Approve"}
+          <CheckIcon data-icon="inline-start" />
+          {isDeciding ? "Working..." : "Approve & run"}
         </Button>
         <Button
           type="button"
           size="sm"
-          variant="destructive"
+          variant="outline"
           disabled={isDeciding}
           onClick={onDeny}
           aria-label={`Deny ${toolName}`}
         >
+          <XIcon data-icon="inline-start" />
           Deny
         </Button>
       </div>
@@ -183,6 +242,8 @@ export default function ConversationPage() {
   const [isDeciding, setIsDeciding] = useState(false);
   const [isHandingOff, setIsHandingOff] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [memories, setMemories] = useState<MemoryEntry[] | null>(null);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[] | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -254,6 +315,23 @@ export default function ConversationPage() {
         setToolsByName(new Map(tools.map((t) => [t.name, t])));
         setMessages(history);
 
+        // Dossier data is best-effort — each section simply stays hidden
+        // if its fetch fails.
+        void apiFetch<MemoryEntry[]>(`/memory/coworker/${cw.id}/timeline`)
+          .then(setMemories)
+          .catch(() => {});
+        void apiFetch<KnowledgeBase[]>(`/knowledge-bases?workspace_id=${conv.workspace_id}`)
+          .then((bases) =>
+            setKnowledgeBases(
+              bases.filter(
+                (base) =>
+                  base.attached_coworker_ids.includes(cw.id) ||
+                  (base.scope === "coworker" && base.scope_id === cw.id)
+              )
+            )
+          )
+          .catch(() => {});
+
         const pending = await listPendingApprovalRequests(conv.workspace_id);
         const mine = pending.find((ar) => ar.conversation_id === conversationId);
         if (mine) {
@@ -305,7 +383,13 @@ export default function ConversationPage() {
     } else if (event.event === "tool_call_started") {
       setLiveToolCalls((prev) => [
         ...prev,
-        { toolName: event.data.tool_name, arguments: event.data.arguments, result: null },
+        {
+          toolName: event.data.tool_name,
+          arguments: event.data.arguments,
+          result: null,
+          startedAt: Date.now(),
+          durationMs: null,
+        },
       ]);
     } else if (event.event === "tool_call_result") {
       setLiveToolCalls((prev) => {
@@ -316,11 +400,21 @@ export default function ConversationPage() {
         if (idx === undefined) {
           return [
             ...prev,
-            { toolName: event.data.tool_name, arguments: null, result: event.data.result },
+            {
+              toolName: event.data.tool_name,
+              arguments: null,
+              result: event.data.result,
+              startedAt: Date.now(),
+              durationMs: null,
+            },
           ];
         }
         const next = [...prev];
-        next[idx] = { ...next[idx], result: event.data.result };
+        next[idx] = {
+          ...next[idx],
+          result: event.data.result,
+          durationMs: Date.now() - next[idx].startedAt,
+        };
         return next;
       });
     } else if (event.event === "approval_required") {
@@ -411,6 +505,10 @@ export default function ConversationPage() {
     }
   }
 
+  function autoRunOf(risk: RiskClassification | null): boolean {
+    return risk !== null && coworker?.permission_profile[risk] === "auto";
+  }
+
   function resultMessageFor(coworkerMessageId: string, toolCallId: string): ChatMessage | undefined {
     return messages.find(
       (m) => m.parent_message_id === coworkerMessageId && m.tool_call_id === toolCallId
@@ -429,6 +527,7 @@ export default function ConversationPage() {
       return (
         <ApprovalCard
           key={call.id}
+          coworkerName={coworker?.name ?? "Coworker"}
           toolName={call.name}
           args={call.arguments}
           risk={riskOf(toolsByName, call.name)}
@@ -448,13 +547,15 @@ export default function ConversationPage() {
       }
     }
 
+    const risk = riskOf(toolsByName, call.name);
     return (
       <ToolCallCard
         key={call.id}
         toolName={call.name}
         args={call.arguments}
         result={result}
-        risk={riskOf(toolsByName, call.name)}
+        risk={risk}
+        autoRun={autoRunOf(risk)}
         pending={!resultMessage}
       />
     );
@@ -487,8 +588,14 @@ export default function ConversationPage() {
   const isTurnActive = isSending || streamingText.length > 0 || liveToolCalls.length > 0;
   const inputDisabled = isSending || pendingApproval !== null;
 
+  const modelLabel =
+    MODEL_SHORT_LABELS[coworker.model_binding.primary] ?? coworker.model_binding.primary;
+  const attachedSources = knowledgeBases ?? [];
+  const longTermMemories = (memories ?? []).filter((entry) => entry.is_long_term);
+
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 items-stretch gap-8 px-4 py-6">
+    <div className="mx-auto flex w-full min-w-0 max-w-2xl flex-1 flex-col">
       <div className="mb-4 flex items-center gap-3 border-b pb-4">
         <Link
           href={`/coworkers/${coworker.id}`}
@@ -510,10 +617,18 @@ export default function ConversationPage() {
           </div>
         )}
         <div className="flex min-w-0 flex-col">
-          <span className="truncate font-heading text-sm font-semibold">{coworker.name}</span>
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span className="truncate font-heading text-sm font-semibold">{coworker.name}</span>
+            <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+              {coworker.role_description}
+            </span>
+          </div>
           <span className="text-xs text-muted-foreground">
-            {MODEL_SHORT_LABELS[coworker.model_binding.primary] ??
-              coworker.model_binding.primary}
+            {pendingApproval
+              ? "Working · paused for your approval"
+              : isTurnActive
+                ? "Working..."
+                : modelLabel}
           </span>
         </div>
       </div>
@@ -592,13 +707,15 @@ export default function ConversationPage() {
             <div className="flex flex-col gap-1.5 pl-6">
             {liveToolCalls.map((tc, i) => {
               const isPendingHere = pendingApproval !== null && tc.result === null;
+              const risk = riskOf(toolsByName, tc.toolName);
               if (isPendingHere) {
                 return (
                   <ApprovalCard
                     key={i}
+                    coworkerName={coworker.name}
                     toolName={tc.toolName}
                     args={tc.arguments ?? {}}
-                    risk={riskOf(toolsByName, tc.toolName)}
+                    risk={risk}
                     isDeciding={isDeciding}
                     onApprove={() => handleDecide(true)}
                     onDeny={() => handleDecide(false)}
@@ -611,8 +728,10 @@ export default function ConversationPage() {
                   toolName={tc.toolName}
                   args={tc.arguments}
                   result={tc.result}
-                  risk={riskOf(toolsByName, tc.toolName)}
+                  risk={risk}
+                  autoRun={autoRunOf(risk)}
                   pending={tc.result === null}
+                  durationMs={tc.durationMs}
                 />
               );
             })}
@@ -638,7 +757,7 @@ export default function ConversationPage() {
             placeholder={
               pendingApproval
                 ? "Resolve the pending approval to continue..."
-                : `Message ${coworker.name}...`
+                : `Message ${coworker.name}... (they'll remember this conversation)`
             }
             disabled={inputDisabled}
             rows={1}
@@ -663,6 +782,12 @@ export default function ConversationPage() {
                 <ClockIcon data-icon="inline-start" />
                 {isHandingOff ? "Queuing..." : "Run in background"}
               </Button>
+              <Button type="button" variant="ghost" size="sm" asChild>
+                <Link href={`/coworkers/${coworker.id}`} aria-label={`Manage ${coworker.name}'s tools`}>
+                  <WrenchIcon data-icon="inline-start" />
+                  Tools
+                </Link>
+              </Button>
             </div>
             <Button type="submit" size="icon" disabled={inputDisabled || !input.trim()}>
               <span className="sr-only">Send message</span>
@@ -671,6 +796,104 @@ export default function ConversationPage() {
           </div>
         </div>
       </form>
+    </div>
+
+    <aside className="hidden w-72 shrink-0 flex-col gap-4 self-start xl:flex" aria-label="Coworker dossier">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Dossier
+      </p>
+
+      <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <CpuIcon className="size-3.5" />
+          Model
+        </h3>
+        <div>
+          <p className="font-mono text-sm font-semibold">{modelLabel}</p>
+          {coworker.model_binding.fallback?.length ? (
+            <p className="text-xs text-muted-foreground">
+              {coworker.model_binding.fallback.length} fallback
+              {coworker.model_binding.fallback.length === 1 ? "" : "s"} configured
+            </p>
+          ) : null}
+        </div>
+        <Button size="sm" variant="outline" asChild>
+          <Link href={`/coworkers/${coworker.id}`}>Change model</Link>
+        </Button>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <ShieldIcon className="size-3.5" />
+            Permissions
+          </h3>
+          <Link
+            href={`/coworkers/${coworker.id}`}
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Edit
+          </Link>
+        </div>
+        <ul className="flex flex-col gap-1.5 text-xs">
+          {(["safe", "sensitive", "dangerous"] as const).map((tier) => (
+            <li key={tier} className="flex items-center justify-between">
+              <Badge className={RISK_BADGE_CLASS[tier]}>{RISK_LABELS[tier]}</Badge>
+              <span className="text-muted-foreground">
+                {coworker.permission_profile[tier] === "auto" ? "Auto-run" : "Ask first"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <BrainIcon className="size-3.5" />
+          Knowledge &amp; memory
+        </h3>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-lg font-semibold">{memories?.length ?? "—"}</p>
+            <p className="text-xs text-muted-foreground">memories</p>
+          </div>
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-lg font-semibold">{knowledgeBases ? attachedSources.length : "—"}</p>
+            <p className="text-xs text-muted-foreground">sources</p>
+          </div>
+        </div>
+        {attachedSources.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-xs">
+            {attachedSources.slice(0, 4).map((base) => (
+              <li key={base.id} className="truncate text-muted-foreground">
+                {base.name}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      {memories !== null ? (
+        <section className="flex flex-col gap-2 rounded-xl border bg-card p-4">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Remembers
+          </h3>
+          {longTermMemories.length > 0 ? (
+            <ul className="flex flex-col gap-2 text-xs leading-relaxed text-muted-foreground">
+              {longTermMemories.slice(0, 3).map((entry) => (
+                <li key={entry.id} className="line-clamp-3">
+                  {entry.content}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Nothing promoted to long-term memory yet.
+            </p>
+          )}
+        </section>
+      ) : null}
+    </aside>
     </div>
   );
 }
