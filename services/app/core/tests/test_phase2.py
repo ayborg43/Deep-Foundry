@@ -1,18 +1,20 @@
 import hashlib
 import hmac
 import json
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from core.coworkers import create_coworker
 from core.models import (
     AgentTeam, Integration, MarketplaceListing, OrgPolicyFloor, PermissionProfile,
-    WorkflowRun, WorkflowRunStep, Workspace, WorkspaceMember, User,
+    WorkflowRun, WorkflowRunStep, WorkflowTrigger, Workspace, WorkspaceMember, User,
 )
 from core.permissions import resolve_tool_permission
-from core.v2_engine import advance_workflow_run
+from core.v2_engine import advance_workflow_run, evaluate_due_triggers
 from core.v2_services import create_agent_team, create_api_token, create_workflow, start_workflow_run
 
 
@@ -43,6 +45,36 @@ class OrganizationAndTeamTests(Phase2TestBase):
 
 
 class WorkflowTests(Phase2TestBase):
+    @patch("worker.tasks.execute_workflow_run.delay")
+    def test_due_scheduler_locks_trigger_without_locking_nullable_workflow_joins(self, delay):
+        workflow = create_workflow(
+            workspace=self.workspace,
+            user=self.user,
+            name="Scheduled",
+            definition={"steps": [{"type": "human_checkpoint", "title": "Review"}]},
+        )
+        previous_run_at = timezone.now() - timedelta(minutes=1)
+        trigger = WorkflowTrigger.objects.create(
+            workflow=workflow,
+            trigger_type=WorkflowTrigger.TriggerType.SCHEDULED,
+            schedule_cron="*/5 * * * *",
+            next_run_at=previous_run_at,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(evaluate_due_triggers(), 1)
+
+        trigger.refresh_from_db()
+        self.assertGreater(trigger.next_run_at, previous_run_at)
+        self.assertEqual(
+            WorkflowRun.objects.filter(
+                workflow_version=workflow.current_version,
+                triggered_by=WorkflowRun.TriggeredBy.SCHEDULE,
+            ).count(),
+            1,
+        )
+        delay.assert_called_once()
+
     @patch("worker.tasks.execute_workflow_run.delay")
     def test_human_checkpoint_pauses_and_resumes_durable_run(self, delay):
         workflow = create_workflow(workspace=self.workspace, user=self.user, name="Approval", definition={"steps": [{"type": "human_checkpoint", "title": "Approve"}]})

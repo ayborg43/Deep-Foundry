@@ -290,7 +290,11 @@ def evaluate_due_triggers() -> int:
     now = timezone.now()
     with transaction.atomic():
         due = list(
-            WorkflowTrigger.objects.select_for_update()
+            # current_version is nullable, so select_related() uses a LEFT
+            # OUTER JOIN. PostgreSQL cannot apply an unscoped FOR UPDATE to
+            # the nullable side of that join. Only trigger rows coordinate
+            # competing scheduler workers; the related rows are read-only.
+            WorkflowTrigger.objects.select_for_update(of=("self",))
             .select_related("workflow__current_version")
             .filter(
                 trigger_type=WorkflowTrigger.TriggerType.SCHEDULED,
