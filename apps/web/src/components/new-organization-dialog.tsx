@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { Building2, SparklesIcon, UsersIcon } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Building2, SparklesIcon } from "lucide-react";
 
 import {
   Dialog,
@@ -20,13 +20,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { setWorkspaceId } from "@/lib/auth";
 
-type TeamTemplate = {
-  key: string;
-  label: string;
-  description: string;
-  coworkers: { name: string; role_description: string }[];
-};
-
 type SpecCoworker = {
   name: string;
   team_role: string;
@@ -41,8 +34,7 @@ type TeamSpec = {
   coworkers: SpecCoworker[];
 };
 
-// "empty" = no coworkers; "ai" = describe it and review the proposal;
-// anything else is a template key from GET /team-templates.
+// "empty" = no coworkers; "ai" = describe it and review the proposal.
 const EMPTY = "empty";
 const AI = "ai";
 
@@ -54,8 +46,7 @@ export function NewOrganizationDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [name, setName] = useState("");
-  const [templates, setTemplates] = useState<TeamTemplate[]>([]);
-  const [choice, setChoice] = useState("solo");
+  const [choice, setChoice] = useState(EMPTY);
   const [description, setDescription] = useState("");
   const [spec, setSpec] = useState<TeamSpec | null>(null);
   const [included, setIncluded] = useState<boolean[]>([]);
@@ -66,20 +57,9 @@ export function NewOrganizationDialog({
   // provisions into the same org instead of creating a duplicate.
   const [createdOrgId, setCreatedOrgId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    void (async () => {
-      try {
-        setTemplates(await apiFetch<TeamTemplate[]>("/team-templates"));
-      } catch {
-        // Templates are an enhancement; without them the empty option remains.
-      }
-    })();
-  }, [open]);
-
   function reset() {
     setName("");
-    setChoice("solo");
+    setChoice(EMPTY);
     setDescription("");
     setSpec(null);
     setIncluded([]);
@@ -120,7 +100,7 @@ export function NewOrganizationDialog({
     event.preventDefault();
     if (!name.trim() || busy) return;
     if (choice === AI && (!spec || !included.some(Boolean))) {
-      setError("Generate a team proposal and keep at least one coworker — or pick a template.");
+      setError("Generate a team proposal and keep at least one coworker, or choose an empty workspace.");
       return;
     }
     setBusy(true);
@@ -182,7 +162,7 @@ export function NewOrganizationDialog({
             <DialogTitle>New organization</DialogTitle>
             <DialogDescription>
               A separate workspace for a company or team — its own coworkers, members, data,
-              and settings. Pick a starting team and we&apos;ll set it up for you.
+              and settings. Start empty or design a team you can review.
             </DialogDescription>
           </DialogHeader>
 
@@ -207,25 +187,6 @@ export function NewOrganizationDialog({
             <div className="flex flex-col gap-2">
               <Label>Starting team</Label>
               <div role="radiogroup" aria-label="Starting team" className="grid gap-2">
-                {templates.map((template) => (
-                  <button
-                    key={template.key}
-                    type="button"
-                    role="radio"
-                    aria-checked={choice === template.key}
-                    onClick={() => setChoice(template.key)}
-                    className={optionClass(choice === template.key)}
-                  >
-                    <span className="flex items-center gap-2 text-sm font-medium">
-                      <UsersIcon className="size-3.5 text-primary" />
-                      {template.label}
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {template.coworkers.length} coworker{template.coworkers.length === 1 ? "" : "s"}
-                      </span>
-                    </span>
-                    <span className="text-xs text-muted-foreground">{template.description}</span>
-                  </button>
-                ))}
                 <button
                   type="button"
                   role="radio"

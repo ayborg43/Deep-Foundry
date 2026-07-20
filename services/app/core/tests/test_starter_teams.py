@@ -6,8 +6,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from ai.team_designer import TeamDesignError, _extract_json, _sanitize
-from core.models import AgentTeam, Coworker, User
-from core.provisioning import provision_personal_workspace
+from core.coworkers import create_coworker
+from core.models import Coworker, User
+from core.provisioning import DEFAULT_MODEL_BINDING, provision_personal_workspace
 
 VALID_PASSWORD = "correct horse battery staple 42"
 
@@ -20,42 +21,29 @@ class StarterTeamApiTests(APITestCase):
         self.workspace = provision_personal_workspace(self.user)
         self.client.force_authenticate(user=self.user)
 
-    def test_template_catalog_lists_blueprints(self):
+    def test_template_catalog_is_empty(self):
+        existing = create_coworker(
+            workspace=self.workspace,
+            owner=self.user,
+            owner_type=Coworker.OwnerType.USER,
+            name="User-created coworker",
+            role_description="A role created by the user.",
+            model_binding=DEFAULT_MODEL_BINDING,
+            created_by=self.user,
+        )
         response = self.client.get(reverse("team-template-list"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        keys = {row["key"] for row in response.data}
-        self.assertEqual(keys, {"software", "marketing", "operations", "solo"})
-        software = next(row for row in response.data if row["key"] == "software")
-        self.assertEqual(len(software["coworkers"]), 4)
+        self.assertEqual(response.data, [])
+        self.assertTrue(Coworker.objects.filter(id=existing.id).exists())
 
-    def test_provision_software_template_creates_coworkers_team_and_tools(self):
+    def test_removed_template_cannot_create_coworkers(self):
         response = self.client.post(
             reverse("provision-team", kwargs={"workspace_id": self.workspace.id}),
             {"template": "software"},
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertEqual(len(response.data["coworkers"]), 4)
-        self.assertIsNotNone(response.data["team_id"])
-
-        team = AgentTeam.objects.get(id=response.data["team_id"])
-        self.assertEqual(team.collaboration_pattern, "manager_delegate")
-        self.assertEqual(team.current_version.members.count(), 4)
-
-        developer = Coworker.objects.get(workspace=self.workspace, name="Developer")
-        attached = {row.tool.name for row in developer.tool_attachments.all()}
-        self.assertIn("execute_code", attached)
-        # Versioned like any UI-created coworker — usable immediately.
-        self.assertEqual(developer.current_version.version_number, 1)
-
-    def test_provision_solo_template_creates_no_team(self):
-        response = self.client.post(
-            reverse("provision-team", kwargs={"workspace_id": self.workspace.id}),
-            {"template": "solo"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertIsNone(response.data["team_id"])
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Coworker.objects.filter(workspace=self.workspace).exists())
 
     def test_provision_custom_spec_matches_template_path(self):
         spec = {

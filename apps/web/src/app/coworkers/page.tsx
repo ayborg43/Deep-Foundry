@@ -240,7 +240,7 @@ export default function CoworkersRosterPage() {
             </span>
             <span className="font-heading font-semibold">Hire a coworker</span>
             <span className="max-w-52 text-sm text-muted-foreground">
-              Start from a template or describe the job you need done.
+              Describe the job you need done and configure the role.
             </span>
           </Link>
         </div>
