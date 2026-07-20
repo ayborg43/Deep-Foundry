@@ -189,6 +189,26 @@ WEB_SEARCH_MAX_RESPONSE_BYTES = int(
     os.environ.get("WEB_SEARCH_MAX_RESPONSE_BYTES", str(2 * 1024 * 1024))
 )
 
+# Keyless recent-news discovery. GDELT's public DOC API is blended into the
+# normal web-search results; DuckDuckGo remains available when it is busy or
+# unavailable. The shared cache slot respects GDELT's public request pacing.
+NEWS_SEARCH_ENABLED = os.environ.get("NEWS_SEARCH_ENABLED", "true").lower() == "true"
+NEWS_SEARCH_ENDPOINT = os.environ.get(
+    "NEWS_SEARCH_ENDPOINT", "https://api.gdeltproject.org/api/v2/doc/doc"
+)
+NEWS_SEARCH_TIMEOUT_SECONDS = float(
+    os.environ.get("NEWS_SEARCH_TIMEOUT_SECONDS", "15")
+)
+NEWS_SEARCH_MAX_RESULTS = int(os.environ.get("NEWS_SEARCH_MAX_RESULTS", "5"))
+NEWS_SEARCH_MAX_RESPONSE_BYTES = int(
+    os.environ.get("NEWS_SEARCH_MAX_RESPONSE_BYTES", str(2 * 1024 * 1024))
+)
+NEWS_SEARCH_TIMESPAN = os.environ.get("NEWS_SEARCH_TIMESPAN", "7d")
+NEWS_SEARCH_MIN_INTERVAL_SECONDS = float(
+    os.environ.get("NEWS_SEARCH_MIN_INTERVAL_SECONDS", "5")
+)
+NEWS_SEARCH_CACHE_SECONDS = int(os.environ.get("NEWS_SEARCH_CACHE_SECONDS", "900"))
+
 # Built-in public webpage reader. User-provided URLs are resolved and pinned to
 # public IPs in ai/web_reader.py; these bounds keep a single model tool call
 # from turning into an unbounded download or prompt payload.

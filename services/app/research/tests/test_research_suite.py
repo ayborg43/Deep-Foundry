@@ -272,15 +272,24 @@ class ResearchExecutionTests(TestCase):
     ):
         user, workspace = create_workspace()
         search.return_value = [
-            {"url": "https://example.com/report", "title": "Example", "snippet": "Evidence"}
+            {
+                "url": "https://example.com/report",
+                "title": "Example",
+                "snippet": "Evidence",
+                "publisher": "GDELT publisher",
+                "published_at": "2026-07-02T00:00:00Z",
+                "language": "en",
+                "country": "NG",
+                "provider": "gdelt",
+            }
         ]
         read.return_value = {
             "requested_url": "https://example.com/report",
             "url": "https://example.com/report",
             "title": "Example report",
-            "publisher": "Example",
-            "published_at": "2026-07-01T00:00:00Z",
-            "language": "en",
+            "publisher": "",
+            "published_at": "",
+            "language": "",
             "content_type": "text/html",
             "text": (
                 "This example report contains a sufficiently detailed supporting passage "
@@ -300,6 +309,11 @@ class ResearchExecutionTests(TestCase):
         self.assertEqual(run.status, ResearchRun.Status.COMPLETED)
         self.assertEqual(run.progress, 100)
         self.assertEqual(run.sources.count(), 1)
+        source = run.sources.first()
+        self.assertEqual(source.publisher, "GDELT publisher")
+        self.assertEqual(source.published_at.isoformat(), "2026-07-02T00:00:00+00:00")
+        self.assertEqual(source.country, "NG")
+        self.assertEqual(source.metadata["discovery_provider"], "gdelt")
         self.assertEqual(run.sources.first().evidence.count(), 1)
         self.assertEqual(
             run.sources.first().evidence.first().claim,

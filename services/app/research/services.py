@@ -206,7 +206,10 @@ def _store_source(run: ResearchRun, page: dict, source_type: str) -> ResearchSou
     ):
         return None
     requested_country = str(controls.get("country") or "").strip().upper()
-    source_country = _country_from_host(host)
+    discovered_country = str(page.get("country") or "").strip().upper()
+    source_country = (
+        discovered_country if 1 < len(discovered_country) <= 3 else _country_from_host(host)
+    )
     if requested_country and source_country and source_country != requested_country:
         return None
     published_at = _publication_datetime(str(page.get("published_at") or ""))
@@ -236,6 +239,8 @@ def _store_source(run: ResearchRun, page: dict, source_type: str) -> ResearchSou
             "segments": page.get("segments", []),
             "last_modified": page.get("last_modified", ""),
             "truncated": bool(page.get("truncated")),
+            "discovery_provider": page.get("discovery_provider", ""),
+            "discovery_country": page.get("discovery_country", ""),
         },
         duplicate_of=duplicate,
     )
@@ -544,6 +549,14 @@ def execute_research_run(run_id: str) -> None:
                                 if page.get("document_type")
                                 else ResearchSource.SourceType.WEBPAGE
                             )
+                        for field in ("published_at", "publisher", "language"):
+                            if not page.get(field) and candidate.get(field):
+                                page[field] = candidate[field]
+                        page["discovery_provider"] = candidate.get("provider", "")
+                        page["discovery_country"] = candidate.get("country", "")
+                        candidate_country = str(candidate.get("country") or "").strip()
+                        if not page.get("country") and 1 < len(candidate_country) <= 3:
+                            page["country"] = candidate_country
                         source = _store_source(run, page, source_type)
                         if source and any(
                             domain_matches(urlsplit(source.url).hostname or "", rule)
