@@ -107,12 +107,12 @@ function NavRow({
   const active = isActive(pathname, item);
   const Icon = item.icon;
   return (
-    <li>
+    <li className="min-w-0">
       <Link
         href={item.href}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
-        className={`group flex min-h-9 items-center gap-2.5 rounded-[9px] border px-2.5 text-[0.84375rem] font-medium transition-[background-color,border-color,color,box-shadow] ${
+        className={`group flex min-h-9 min-w-0 items-center gap-2.5 rounded-[9px] border px-2.5 text-[0.84375rem] font-medium transition-[background-color,border-color,color,box-shadow] ${
           active
             ? "border-sidebar-border bg-card font-semibold text-foreground shadow-[var(--shadow-sm)]"
             : "border-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -215,7 +215,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <Link
         href="/home"
         onClick={onNavigate}
@@ -239,7 +239,10 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         </Link>
       </div>
 
-      <nav aria-label="Primary navigation" className="flex-1 overflow-y-auto px-3 pb-4">
+      <nav
+        aria-label="Primary navigation"
+        className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-4"
+      >
         <ul className="grid gap-0.5">
           {PRIMARY.map((item) => (
             <NavRow key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
@@ -267,13 +270,13 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
                   pathname.startsWith(`/coworkers/${coworker.id}/`);
                 const status = statuses.get(coworker.id);
                 return (
-                  <li key={coworker.id}>
+                  <li key={coworker.id} className="min-w-0">
                     <Link
                       href={`/coworkers/${coworker.id}`}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       title={status?.detail || undefined}
-                      className={`group flex min-h-8 items-center gap-2.5 rounded-md px-3 text-[0.8125rem] transition-colors ${
+                      className={`group flex min-h-8 min-w-0 items-center gap-2.5 rounded-md px-3 text-[0.8125rem] transition-colors ${
                         active
                           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                           : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
@@ -291,7 +294,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
                           {coworker.name.slice(0, 1)}
                         </span>
                       )}
-                      <span className="truncate">{coworker.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{coworker.name}</span>
                       {status ? (
                         <span className="ml-auto flex shrink-0 items-center">
                           <CoworkerStatusGlyph state={status.state} className="size-3.5" />
@@ -316,19 +319,22 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
                   pathname === `/conversations/${conv.id}` ||
                   pathname.startsWith(`/conversations/${conv.id}/`);
                 return (
-                  <li key={conv.id} className="group/recent relative">
+                  <li key={conv.id} className="group/recent relative min-w-0">
                     <Link
                       href={`/conversations/${conv.id}`}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
-                      className={`group flex min-h-8 items-center gap-2.5 rounded-md px-3 pr-8 text-[0.8125rem] transition-colors ${
+                      title={conv.title || "Untitled conversation"}
+                      className={`group flex min-h-8 min-w-0 items-start gap-2.5 rounded-md px-3 py-2 pr-8 text-[0.8125rem] transition-colors ${
                         active
                           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                           : "text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground"
                       }`}
                     >
-                      <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground/60 group-hover:text-foreground/70" />
-                      <span className="truncate">{conv.title || "Untitled conversation"}</span>
+                      <MessageSquareIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/60 group-hover:text-foreground/70" />
+                      <span className="line-clamp-2 min-w-0 flex-1 whitespace-normal leading-4 [overflow-wrap:anywhere]">
+                        {conv.title || "Untitled conversation"}
+                      </span>
                     </Link>
                     <button
                       type="button"

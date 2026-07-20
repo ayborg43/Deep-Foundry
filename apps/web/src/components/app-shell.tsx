@@ -154,7 +154,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-svh overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className="hidden h-svh w-[266px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+      <aside className="hidden h-svh w-[266px] shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar lg:flex">
         <AppSidebar />
       </aside>
 
@@ -167,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-foreground/30 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-sidebar-border bg-sidebar shadow-xl">
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col overflow-hidden border-r border-sidebar-border bg-sidebar shadow-xl">
             <div className="flex justify-end px-3 pt-3">
               <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} aria-label="Close">
                 <XIcon className="size-5" />
