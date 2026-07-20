@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { AppShell } from "@/components/app-shell";
 import { PwaRegister } from "@/components/pwa-register";
+import { SessionTimeout } from "@/components/session-timeout";
 
 const hankenGrotesk = Hanken_Grotesk({
   variable: "--font-hanken-grotesk",
@@ -54,6 +55,7 @@ export default function RootLayout({
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <PwaRegister />
+        <SessionTimeout />
         <AppShell>{children}</AppShell>
       </body>
     </html>

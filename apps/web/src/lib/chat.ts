@@ -5,8 +5,7 @@
 // can't handle (it reads the whole body and JSON-parses it) — streamTurn
 // below is a parallel, minimal SSE reader instead of a fetch wrapper.
 
-import { API_BASE_URL, apiFetch, ApiRequestError } from "./api";
-import { getTokens } from "./auth";
+import { apiFetch, ApiRequestError, fetchWithSession } from "./api";
 import type {
   ApprovalRequestData,
   ChatMessage,
@@ -42,19 +41,11 @@ async function streamTurn(
   options: RequestInit,
   onEvent: (event: ChatSSEEvent) => void
 ): Promise<void> {
-  const tokens = getTokens();
-  const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type") && options.body) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (tokens?.access) {
-    headers.set("Authorization", `Bearer ${tokens.access}`);
-  }
-
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/api/v1${path}`, { ...options, headers });
-  } catch {
+    res = await fetchWithSession(path, options);
+  } catch (error) {
+    if (error instanceof ApiRequestError) throw error;
     throw new ApiRequestError(
       0,
       "network_error",

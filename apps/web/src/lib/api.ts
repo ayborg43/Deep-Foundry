@@ -1,9 +1,14 @@
-// Thin fetch helper for the Deep-Foundry API. Attaches the bearer access
-// token (if any) and normalizes the { error: { code, message, details } }
-// envelope into a thrown ApiRequestError. No retry/refresh interceptor
-// chain by design — out of scope for Milestone 1.
+// Shared fetch helper for the Deep-Foundry API. It attaches the bearer access
+// token, performs one refresh-and-retry on 401, redirects expired sessions to
+// login, and normalizes the API error envelope into ApiRequestError.
 
-import { getTokens } from "./auth";
+import {
+  expireSession,
+  getSessionRemainingMs,
+  getTokens,
+  setTokens,
+  type Tokens,
+} from "./auth";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
@@ -35,27 +40,103 @@ export class ApiRequestError extends Error {
 // sent and rejected by JWTAuthentication before the AllowAny view runs.
 type ApiFetchOptions = RequestInit & { auth?: boolean };
 
+let refreshPromise: Promise<Tokens | null> | null = null;
+
+async function refreshSession(): Promise<Tokens | null> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    const current = getTokens();
+    if (!current?.refresh) {
+      expireSession();
+      return null;
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh: current.refresh }),
+      });
+    } catch {
+      return null;
+    }
+    if (!response.ok) {
+      const latest = getTokens();
+      if (latest?.refresh && latest.refresh !== current.refresh) return latest;
+      expireSession();
+      return null;
+    }
+    try {
+      const data = (await response.json()) as { access?: string; refresh?: string };
+      if (!data.access) {
+        expireSession();
+        return null;
+      }
+      const refreshed = {
+        access: data.access,
+        refresh: data.refresh ?? current.refresh,
+      };
+      // Background polling must not count as user activity.
+      setTokens(refreshed, { touch: false });
+      return refreshed;
+    } catch {
+      expireSession();
+      return null;
+    }
+  })();
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
+export async function fetchWithSession(
+  path: string,
+  options: ApiFetchOptions = {}
+): Promise<Response> {
+  const { auth = true, ...init } = options;
+  if (auth) {
+    const remaining = getSessionRemainingMs();
+    if (remaining !== null && remaining <= 0) {
+      expireSession();
+      throw new ApiRequestError(
+        401,
+        "session_expired",
+        "Your session expired. Sign in again to continue."
+      );
+    }
+  }
+
+  const request = (access?: string) => {
+    const headers = new Headers(init.headers);
+    if (!headers.has("Content-Type") && init.body && !(init.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
+    if (auth && access) headers.set("Authorization", `Bearer ${access}`);
+    return fetch(`${API_BASE_URL}/api/v1${path}`, { ...init, headers });
+  };
+
+  const current = auth ? getTokens() : null;
+  let response = await request(current?.access);
+  if (!auth || response.status !== 401) return response;
+
+  const refreshed = await refreshSession();
+  if (!refreshed) return response;
+  response = await request(refreshed.access);
+  if (response.status === 401) expireSession();
+  return response;
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: ApiFetchOptions = {}
 ): Promise<T> {
-  const { auth = true, ...init } = options;
-  const tokens = getTokens();
-  const headers = new Headers(init.headers);
-  if (!headers.has("Content-Type") && init.body && !(init.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (auth && tokens?.access) {
-    headers.set("Authorization", `Bearer ${tokens.access}`);
-  }
-
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/api/v1${path}`, {
-      ...init,
-      headers,
-    });
-  } catch {
+    res = await fetchWithSession(path, options);
+  } catch (error) {
+    if (error instanceof ApiRequestError) throw error;
     throw new ApiRequestError(
       0,
       "network_error",
@@ -84,10 +165,17 @@ export async function apiFetch<T = unknown>(
 }
 
 export async function apiDownload(path: string, fallbackName: string): Promise<void> {
-  const tokens = getTokens();
-  const headers = new Headers();
-  if (tokens?.access) headers.set("Authorization", `Bearer ${tokens.access}`);
-  const response = await fetch(`${API_BASE_URL}/api/v1${path}`, { headers });
+  let response: Response;
+  try {
+    response = await fetchWithSession(path);
+  } catch (error) {
+    if (error instanceof ApiRequestError) throw error;
+    throw new ApiRequestError(
+      0,
+      "network_error",
+      "Couldn't reach the server. Check your connection and try again."
+    );
+  }
   if (!response.ok) {
     let message = "Couldn't download this file.";
     try {

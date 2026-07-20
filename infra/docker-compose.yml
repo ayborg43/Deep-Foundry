@@ -242,6 +242,7 @@ services:
       context: ../apps/web
       args:
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+        NEXT_PUBLIC_SESSION_IDLE_TIMEOUT_MINUTES: ${SESSION_IDLE_TIMEOUT_MINUTES:-30}
         INTERNAL_API_BASE_URL: http://app:8000
     restart: unless-stopped
     environment:
