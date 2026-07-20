@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { ApprovalPolicyDialog } from "@/components/approval-policy-dialog";
+import { FormattedMessage } from "@/components/formatted-message";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -718,9 +719,7 @@ export default function ConversationPage() {
                   <span className="font-medium text-foreground">{coworker.name}</span>
                 </div>
                 {message.content ? (
-                  <div className="max-w-full whitespace-pre-wrap pl-6 text-sm leading-relaxed text-foreground">
-                    {message.content}
-                  </div>
+                  <FormattedMessage content={message.content} className="max-w-full pl-6" />
                 ) : null}
                 <div className="flex flex-col gap-1.5 pl-6">
                   {(message.tool_calls ?? []).map((call) => renderPersistedToolCall(message, call))}
@@ -755,9 +754,7 @@ export default function ConversationPage() {
               ) : null}
             </div>
             {streamingText ? (
-              <div className="max-w-full whitespace-pre-wrap pl-6 text-sm leading-relaxed text-foreground">
-                {streamingText}
-              </div>
+              <FormattedMessage content={streamingText} className="max-w-full pl-6" />
             ) : null}
             <div className="flex flex-col gap-1.5 pl-6">
             {liveToolCalls.map((tc, i) => {

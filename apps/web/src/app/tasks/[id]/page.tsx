@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { FormattedMessage } from "@/components/formatted-message";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +48,7 @@ export default function TaskDetailPage() {
       <div className="flex items-start justify-between gap-4"><div><h1 className="font-heading text-2xl font-semibold tracking-tight">{task.title}</h1><p className="text-sm text-muted-foreground">Assigned to {task.coworker_name}</p></div><StatusBadge status={task.status} /></div>
       {task.status === "needs_approval" ? <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 dark:border-amber-400/30"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">Approval needed to continue</p><p className="text-sm text-muted-foreground">This coworker has shared its plan and paused. It won&apos;t act until you approve.</p></div><span className="flex shrink-0 gap-2"><Button size="sm" disabled={busy} onClick={() => void decide(true)}>Approve</Button><Button size="sm" variant="destructive" disabled={busy} onClick={() => void decide(false)}>Deny</Button></span></div></div> : null}
       <Card><CardHeader><CardTitle className="font-heading text-lg">Instructions</CardTitle></CardHeader><CardContent><p className="whitespace-pre-wrap text-sm leading-relaxed">{task.description}</p></CardContent></Card>
-      {task.result ? <Card><CardHeader><CardTitle className="font-heading text-lg">Result</CardTitle></CardHeader><CardContent><p className="whitespace-pre-wrap text-sm leading-relaxed">{task.result}</p></CardContent></Card> : null}
+      {task.result ? <Card><CardHeader><CardTitle className="font-heading text-lg">Result</CardTitle></CardHeader><CardContent><FormattedMessage content={task.result} /></CardContent></Card> : null}
       {task.error_message ? <Alert variant="destructive"><AlertDescription>{task.error_message}</AlertDescription></Alert> : null}
       <p className="text-xs text-muted-foreground">Created {new Date(task.created_at).toLocaleString()} · Updated {new Date(task.updated_at).toLocaleString()}</p>
     </div>

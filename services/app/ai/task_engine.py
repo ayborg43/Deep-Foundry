@@ -17,6 +17,7 @@ from ai.model_router.factory import build_model_router
 from ai.model_router.errors import AdapterError, CapabilityError, RateLimitedError
 from ai.model_router.router import ModelRouter
 from ai.model_router.types import ChatMessage, ModelConfig, ToolCall, ToolDefinition
+from ai.response_style import RESPONSE_STYLE_PROMPT
 from ai.tool_executor import ToolExecutionError, execute_tool
 from core.interface import (
     claim_task_execution,
@@ -76,7 +77,7 @@ def _initial_messages(task, role_description: str) -> list[ChatMessage]:
             "Knowledge:\n"
             + "\n".join(f"- [{chunk.document.source_uri}] {chunk.content}" for chunk in chunks)
         )
-    system = role_description + (
+    system = f"{role_description}\n\n{RESPONSE_STYLE_PROMPT}" + (
         "\n\nUse this retrieved context when relevant:\n" + "\n\n".join(context)
         if context
         else ""

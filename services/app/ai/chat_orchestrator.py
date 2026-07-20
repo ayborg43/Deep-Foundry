@@ -32,6 +32,7 @@ from ai.model_router.types import ChatMessage, ModelConfig, ToolCall, ToolDefini
 from ai.knowledge import search_coworker_knowledge
 from ai.memory import remember_conversation_turn, search_memory
 from ai.models import Conversation, MemoryEntry, Message
+from ai.response_style import RESPONSE_STYLE_PROMPT
 from ai.tool_executor import ToolExecutionError, execute_tool
 from core.interface import (
     CoworkerNotFoundError,
@@ -618,7 +619,12 @@ def _build_history(
     coworker_config: ResolvedCoworkerConfig,
     exclude_message_ids: frozenset = frozenset(),
 ) -> list[ChatMessage]:
-    history = [ChatMessage(role="system", content=coworker_config.role_description)]
+    history = [
+        ChatMessage(
+            role="system",
+            content=f"{coworker_config.role_description}\n\n{RESPONSE_STYLE_PROMPT}",
+        )
+    ]
     query = conversation.messages.order_by("created_at")
     if exclude_message_ids:
         query = query.exclude(id__in=exclude_message_ids)
