@@ -550,6 +550,107 @@ class Notification(UUIDPrimaryKeyModel):
         ]
 
 
+class TelegramConnection(UUIDPrimaryKeyModel):
+    """A Telegram private chat verified by Telegram's own /start update."""
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="telegram_connection"
+    )
+    telegram_user_id = models.BigIntegerField(unique=True)
+    private_chat_id = models.BigIntegerField(unique=True)
+    username = models.CharField(max_length=64, null=True, blank=True)
+    display_name = models.CharField(max_length=255, blank=True)
+    enabled = models.BooleanField(default=True)
+    connected_at = models.DateTimeField(auto_now_add=True)
+    last_confirmed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "telegram_connections"
+
+
+class TelegramLinkSession(UUIDPrimaryKeyModel):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="telegram_link_sessions"
+    )
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="telegram_link_sessions"
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "telegram_link_sessions"
+        indexes = [
+            models.Index(
+                fields=["user", "expires_at"],
+                name="telegram_l_user_id_23f935_idx",
+            )
+        ]
+
+
+class TelegramNotificationPreference(UUIDPrimaryKeyModel):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="telegram_notification_preferences"
+    )
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        related_name="telegram_notification_preferences",
+    )
+    enabled = models.BooleanField(default=True)
+    task_completed = models.BooleanField(default=True)
+    research_completed = models.BooleanField(default=True)
+    website_changed = models.BooleanField(default=True)
+    approval_requested = models.BooleanField(default=True)
+    task_failed = models.BooleanField(default=True)
+    monitor_failed = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "telegram_notification_preferences"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "workspace"],
+                name="uniq_telegram_preference_user_workspace",
+            )
+        ]
+
+
+class TelegramDelivery(UUIDPrimaryKeyModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        SENT = "sent", "Sent"
+        SKIPPED = "skipped", "Skipped"
+        FAILED = "failed", "Failed"
+
+    notification = models.OneToOneField(
+        Notification, on_delete=models.CASCADE, related_name="telegram_delivery"
+    )
+    connection = models.ForeignKey(
+        TelegramConnection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deliveries",
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    attempts = models.PositiveSmallIntegerField(default=0)
+    external_message_id = models.CharField(max_length=64, blank=True)
+    last_error = models.CharField(max_length=255, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "telegram_deliveries"
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 / V2: organizations, Agent Teams, workflows, marketplace and SDK.
 

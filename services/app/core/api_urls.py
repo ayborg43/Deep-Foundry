@@ -60,6 +60,14 @@ from core.task_views import (
     TaskDetailView,
     TaskListCreateView,
 )
+from core.telegram_views import (
+    TelegramConnectionView,
+    TelegramLinkSessionCreateView,
+    TelegramLinkSessionDetailView,
+    TelegramPreferenceView,
+    TelegramTestView,
+    TelegramWebhookView,
+)
 from core.v2_views import (
     AgentTeamDetailView,
     AgentTeamListCreateView,
@@ -349,6 +357,28 @@ urlpatterns = [
     path("marketplace/listings/<uuid:listing_id>/fork", MarketplaceForkView.as_view(), name="marketplace-fork"),
     path("marketplace/listings/<uuid:listing_id>/reviews", MarketplaceReviewListCreateView.as_view(), name="marketplace-review-list-create"),
     path("integrations", IntegrationListCreateView.as_view(), name="integration-list-create"),
+    path("telegram/connection", TelegramConnectionView.as_view(), name="telegram-connection"),
+    path(
+        "telegram/link-sessions",
+        TelegramLinkSessionCreateView.as_view(),
+        name="telegram-link-session-create",
+    ),
+    path(
+        "telegram/link-sessions/<str:session_id>",
+        TelegramLinkSessionDetailView.as_view(),
+        name="telegram-link-session-detail",
+    ),
+    path(
+        "telegram/preferences",
+        TelegramPreferenceView.as_view(),
+        name="telegram-preferences",
+    ),
+    path("telegram/test", TelegramTestView.as_view(), name="telegram-test"),
+    path(
+        "webhooks/telegram",
+        TelegramWebhookView.as_view(),
+        name="telegram-webhook",
+    ),
     path("webhooks/<str:integration>/<str:workspace_token>", WebhookIngressView.as_view(), name="webhook-ingress"),
     path("workspaces/<uuid:workspace_id>/enterprise", EnterpriseSettingsView.as_view(), name="enterprise-settings"),
     path("workspaces/<uuid:workspace_id>/policy-rules", PolicyRuleListCreateView.as_view(), name="policy-rule-list-create"),

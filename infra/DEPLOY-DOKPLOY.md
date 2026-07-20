@@ -66,6 +66,28 @@ Hit **Deploy**. On first boot the `app` service runs
 `python manage.py migrate` automatically before starting, then `worker` and
 `beat` (Celery) come up once `app` is healthy.
 
+## Optional Telegram notifications
+
+Create one shared bot with Telegram's `@BotFather`, then set these three
+variables together in Dokploy:
+
+| Variable | Value |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | The bot token from BotFather |
+| `TELEGRAM_BOT_USERNAME` | The bot username without `@` |
+| `TELEGRAM_WEBHOOK_SECRET` | 32-256 random URL-safe characters |
+
+After the deployment is healthy, open a terminal in the `app` service and run:
+
+```bash
+python manage.py configure_telegram_webhook
+```
+
+The command registers
+`https://$DOMAIN/api/v1/webhooks/telegram` and does not print either secret.
+Users can then connect from **Settings > Notifications** by opening their
+single-use Telegram link. They do not enter phone numbers or chat IDs.
+
 ## What runs
 
 | Service | Role | Exposed? |

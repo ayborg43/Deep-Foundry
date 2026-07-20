@@ -36,6 +36,31 @@ def _queue_task(task: Task) -> None:
     execute_background_task.delay(str(task.id))
 
 
+def _fail_workflow_run(run: WorkflowRun) -> bool:
+    """Fail once and notify members without exposing the failure payload."""
+    completed_at = timezone.now()
+    changed = WorkflowRun.objects.filter(
+        id=run.id,
+        status__in=(
+            WorkflowRun.Status.RUNNING,
+            WorkflowRun.Status.NEEDS_APPROVAL,
+        ),
+    ).update(status=WorkflowRun.Status.FAILED, completed_at=completed_at)
+    run.status = WorkflowRun.Status.FAILED
+    run.completed_at = completed_at
+    if changed:
+        workflow = run.workflow_version.workflow
+        notify_workspace(
+            workspace_id=workflow.workspace_id,
+            notification_type="workflow_failed",
+            payload={
+                "workflow_run_id": str(run.id),
+                "title": workflow.name,
+            },
+        )
+    return bool(changed)
+
+
 def _team_task(run: AgentTeamRun, member: AgentTeamMember, title: str, description: str) -> Task:
     task = Task.objects.create(
         workspace=run.agent_team.workspace,
@@ -195,9 +220,7 @@ def advance_workflow_run(run_id: str) -> bool:
                 step.status = WorkflowRunStep.Status.FAILED
                 step.result = {"task_id": str(task.id), "error": task.error_message}
                 step.save(update_fields=["status", "result"])
-                run.status = WorkflowRun.Status.FAILED
-                run.completed_at = timezone.now()
-                run.save(update_fields=["status", "completed_at"])
+                _fail_workflow_run(run)
                 return False
             return True
         task = Task.objects.create(
@@ -231,9 +254,7 @@ def advance_workflow_run(run_id: str) -> bool:
         step.result = {"error": "Organization policy denied this tool action."}
         step.completed_at = timezone.now()
         step.save(update_fields=["status", "result", "completed_at"])
-        run.status = WorkflowRun.Status.FAILED
-        run.completed_at = timezone.now()
-        run.save(update_fields=["status", "completed_at"])
+        _fail_workflow_run(run)
         return False
     decision = resolve_tool_permission(
         attachment.tool.risk_classification, config.permission_profile, config.org_policy_floor
@@ -261,9 +282,7 @@ def advance_workflow_run(run_id: str) -> bool:
     if approval and approval.status == ApprovalRequest.Status.PENDING:
         return False
     if approval and approval.status != ApprovalRequest.Status.APPROVED:
-        run.status = WorkflowRun.Status.FAILED
-        run.completed_at = timezone.now()
-        run.save(update_fields=["status", "completed_at"])
+        _fail_workflow_run(run)
         return False
     output = execute_workflow_tool(
         attachment.tool.name, definition.get("arguments", {}), workspace_id=workspace.id
@@ -273,9 +292,7 @@ def advance_workflow_run(run_id: str) -> bool:
     step.completed_at = timezone.now()
     step.save(update_fields=["status", "result", "completed_at"])
     if output.error:
-        run.status = WorkflowRun.Status.FAILED
-        run.completed_at = timezone.now()
-        run.save(update_fields=["status", "completed_at"])
+        _fail_workflow_run(run)
         return False
     run.current_step_index += 1
     run.save(update_fields=["current_step_index"])

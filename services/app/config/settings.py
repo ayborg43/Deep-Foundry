@@ -7,6 +7,7 @@ worker entrypoint (config.celery:app) — one codebase, two entrypoints.
 """
 
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -137,7 +138,12 @@ REST_FRAMEWORK = {
     # Application-level gateway limit from API.md §10. UserRateThrottle also
     # keys unauthenticated auth/bootstrap requests by source IP.
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.UserRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"user": "1000/min", "password_reset": "20/hour"},
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "1000/min",
+        "password_reset": "20/hour",
+        "telegram_link": "10/hour",
+        "telegram_test": "10/hour",
+    },
 }
 
 SIMPLE_JWT = {
@@ -355,6 +361,38 @@ WEB_APP_URL = os.environ.get("WEB_APP_URL", "http://localhost:3000")
 INTERNAL_API_TOKEN = os.environ.get(
     "INTERNAL_API_TOKEN", "insecure-dev-internal-token-change-in-production"
 )
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+TELEGRAM_LINK_TTL_SECONDS = int(os.environ.get("TELEGRAM_LINK_TTL_SECONDS", "600"))
+TELEGRAM_API_TIMEOUT_SECONDS = int(os.environ.get("TELEGRAM_API_TIMEOUT_SECONDS", "10"))
+TELEGRAM_WEBHOOK_MAX_BYTES = int(os.environ.get("TELEGRAM_WEBHOOK_MAX_BYTES", "65536"))
+_telegram_values = (
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_BOT_USERNAME,
+    TELEGRAM_WEBHOOK_SECRET,
+)
+if any(_telegram_values) and not all(_telegram_values):
+    raise ImproperlyConfigured(
+        "TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME, and TELEGRAM_WEBHOOK_SECRET "
+        "must be configured together."
+    )
+TELEGRAM_ENABLED = all(_telegram_values)
+if TELEGRAM_ENABLED:
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", TELEGRAM_BOT_USERNAME):
+        raise ImproperlyConfigured("TELEGRAM_BOT_USERNAME is invalid.")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", TELEGRAM_WEBHOOK_SECRET):
+        raise ImproperlyConfigured(
+            "TELEGRAM_WEBHOOK_SECRET must be 32-256 URL-safe characters."
+        )
+if not 60 <= TELEGRAM_LINK_TTL_SECONDS <= 3600:
+    raise ImproperlyConfigured("TELEGRAM_LINK_TTL_SECONDS must be between 60 and 3600.")
+if not 1 <= TELEGRAM_API_TIMEOUT_SECONDS <= 30:
+    raise ImproperlyConfigured("TELEGRAM_API_TIMEOUT_SECONDS must be between 1 and 30.")
+if not 1024 <= TELEGRAM_WEBHOOK_MAX_BYTES <= 1048576:
+    raise ImproperlyConfigured(
+        "TELEGRAM_WEBHOOK_MAX_BYTES must be between 1024 and 1048576."
+    )
 
 if ENVIRONMENT == "production":
     insecure_values = {"", "change-me", "insecure-dev-key-do-not-use-in-production"}
@@ -384,6 +422,11 @@ if ENVIRONMENT == "production":
         raise ImproperlyConfigured(
             "SANDBOX_DOCKER_URL is required in production so execute_code fails closed."
         )
+    if TELEGRAM_ENABLED:
+        if not WEB_APP_URL.startswith("https://"):
+            raise ImproperlyConfigured(
+                "WEB_APP_URL must use HTTPS when Telegram notifications are enabled."
+            )
 
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True

@@ -56,6 +56,7 @@ const TITLES: [string, string][] = [
   ["/creator", "Creator payouts"],
   ["/settings/organization", "Organization"],
   ["/settings/integrations", "Integrations"],
+  ["/settings/notifications", "Notifications"],
   ["/settings/enterprise", "Enterprise controls"],
   ["/settings/provider-credentials", "Model providers"],
   ["/settings/mfa", "Security"],

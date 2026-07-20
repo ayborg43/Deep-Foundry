@@ -342,6 +342,34 @@ export type ChatMessage = {
   citations?: MessageCitation[];
 };
 
+export type TelegramConnection = {
+  available: boolean;
+  connected: boolean;
+  bot_username: string;
+  telegram_user_id?: string;
+  username?: string | null;
+  display_name?: string;
+  connected_at?: string;
+};
+
+export type TelegramLinkSession = {
+  id: string;
+  status: "pending" | "linked" | "expired" | "cancelled";
+  deep_link_url?: string;
+  expires_at: string;
+};
+
+export type TelegramNotificationPreferences = {
+  workspace_id: string;
+  enabled: boolean;
+  task_completed: boolean;
+  research_completed: boolean;
+  website_changed: boolean;
+  approval_requested: boolean;
+  task_failed: boolean;
+  monitor_failed: boolean;
+};
+
 export type ResearchEvidence = {
   id: string;
   ordinal: number;

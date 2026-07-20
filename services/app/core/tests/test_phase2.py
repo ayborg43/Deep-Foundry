@@ -12,9 +12,9 @@ from rest_framework.test import APIClient
 
 from core.coworkers import create_coworker
 from core.models import (
-    AgentTeam, Integration, MarketplaceListing, MarketplaceListingVersion,
+    AgentTeam, Integration, MarketplaceListing, MarketplaceListingVersion, Notification,
     OrgPolicyFloor, PermissionProfile,
-    WorkflowRun, WorkflowRunStep, WorkflowTrigger, Workspace, WorkspaceMember, User,
+    Task, WorkflowRun, WorkflowRunStep, WorkflowTrigger, Workspace, WorkspaceMember, User,
 )
 from core.permissions import resolve_tool_permission
 from core.v2_engine import advance_workflow_run, evaluate_due_triggers
@@ -87,6 +87,51 @@ class WorkflowTests(Phase2TestBase):
         step = run.steps.get(); self.assertEqual(run.status, WorkflowRun.Status.NEEDS_APPROVAL)
         response = self.client.post(f"/api/v1/workflow-runs/{run.id}/steps/{step.id}/approve", {}, format="json")
         self.assertEqual(response.status_code, 200); run.refresh_from_db(); self.assertEqual(run.current_step_index, 1)
+
+    @patch("worker.tasks.dispatch_notification_email.delay")
+    @patch("worker.tasks.execute_background_task.delay")
+    @patch("worker.tasks.execute_workflow_run.delay")
+    def test_failed_workflow_notifies_workspace_once(
+        self, _workflow_delay, _task_delay, notification_delay
+    ):
+        workflow = create_workflow(
+            workspace=self.workspace,
+            user=self.user,
+            name="Critical workflow",
+            definition={
+                "steps": [
+                    {
+                        "type": "coworker_action",
+                        "coworker_id": str(self.worker.id),
+                        "title": "Run critical step",
+                        "instructions": "Complete the step.",
+                    }
+                ]
+            },
+        )
+        run = start_workflow_run(
+            workflow, triggered_by=WorkflowRun.TriggeredBy.USER
+        )
+        advance_workflow_run(str(run.id))
+        task = Task.objects.get(created_by_id=run.id)
+        task.status = Task.Status.FAILED
+        task.error_message = "Sensitive internal failure detail"
+        task.save(update_fields=["status", "error_message", "updated_at"])
+
+        advance_workflow_run(str(run.id))
+        advance_workflow_run(str(run.id))
+        run.refresh_from_db()
+        self.assertEqual(run.status, WorkflowRun.Status.FAILED)
+        notifications = Notification.objects.filter(
+            workspace=self.workspace,
+            type=Notification.Type.WORKFLOW_FAILED,
+        )
+        self.assertEqual(notifications.count(), 1)
+        self.assertNotIn(
+            "Sensitive internal failure detail",
+            json.dumps(notifications.get().payload),
+        )
+        notification_delay.assert_called_once()
 
 
 class MarketplaceAndSdkTests(Phase2TestBase):

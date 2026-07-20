@@ -28,6 +28,7 @@ import {
   ShieldAlert,
   Cpu,
   Lock,
+  BellIcon,
   ChevronDown,
   Trash2Icon,
 } from "lucide-react";
@@ -85,6 +86,7 @@ const COLLAPSIBLE: NavGroup[] = [
       { href: "/settings/workspace", label: "Workspace", icon: Settings },
       { href: "/settings/organization", label: "Organization", icon: Building2 },
       { href: "/settings/integrations", label: "Integrations", icon: Plug },
+      { href: "/settings/notifications", label: "Notifications", icon: BellIcon },
       { href: "/settings/enterprise", label: "Enterprise controls", icon: ShieldAlert },
       { href: "/settings/provider-credentials", label: "Model providers", icon: Cpu },
       { href: "/settings/mfa", label: "Security", icon: Lock },

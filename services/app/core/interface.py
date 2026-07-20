@@ -254,15 +254,12 @@ def notify_workspace(
         )
     ]
     created = Notification.objects.bulk_create(rows)
-    from worker.tasks import dispatch_notification_email
+    from worker.tasks import enqueue_notification_deliveries
 
     for row in created:
-        try:
-            dispatch_notification_email.delay(str(row.id))
-        except Exception:
-            # The durable in-app row is primary. A broker outage must not
-            # turn a completed coworker task back into a failed task.
-            continue
+        # The durable in-app row is primary. A broker outage must not turn a
+        # completed coworker task back into a failed task.
+        enqueue_notification_deliveries(str(row.id))
     return [row.id for row in created]
 
 

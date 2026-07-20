@@ -23,3 +23,15 @@
   both Compose files validated; the pinned browser/proxy images built; browserd
   became healthy and fetched Example Domain through the proxy with transfer
   accounting; the direct reader fetched Example Domain; loopback was rejected.
+# Telegram notification integration
+
+- Telegram bots cannot initiate a private conversation. A user must open the
+  bot and tap Start, so a one-time `t.me/<bot>?start=<token>` link is the
+  reliable multi-user linking mechanism.
+- Treat Telegram as a user-owned notification channel, not a workspace-shared
+  generic integration. Keep delivery preferences scoped to the user and
+  workspace.
+- Store only a hash of each short-lived start token. Validate Telegram's
+  webhook secret and require a private chat whose sender and chat IDs match
+  before consuming the token atomically.
+- Never accept phone numbers or manually entered chat IDs as routing data.

@@ -47,12 +47,9 @@ def _notify_user(*, user_id, workspace_id, notification_type: str, payload: dict
         type=notification_type,
         payload=payload,
     )
-    from worker.tasks import dispatch_notification_email
+    from worker.tasks import enqueue_notification_deliveries
 
-    try:
-        dispatch_notification_email.delay(str(notification.id))
-    except Exception:
-        pass
+    enqueue_notification_deliveries(str(notification.id))
 
 
 def _set_stage(run: ResearchRun, stage: str, progress: int, message: str, **details) -> None:
