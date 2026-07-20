@@ -9,6 +9,7 @@ from ai.web_reader import (
     _ReadableHTMLParser,
     _fetch_url,
     _validated_target,
+    fetch_public_resource,
     read_webpage,
 )
 from ai.web_search import _ResultsParser
@@ -99,6 +100,30 @@ class WebPageReaderTests(SimpleTestCase):
         )
         with self.assertRaisesRegex(WebPageError, "insecure HTTP"):
             _fetch_url("https://example.com/start")
+
+    @patch("ai.web_reader._validated_target")
+    @patch("ai.web_reader._request_once")
+    def test_workspace_blocklist_is_rechecked_on_redirect(
+        self, request_once, validated_target
+    ):
+        from urllib.parse import urlsplit
+
+        request_once.return_value = (
+            302,
+            {"location": "https://blocked.example/report"},
+            b"",
+        )
+        validated_target.return_value = (
+            urlsplit("https://blocked.example/report"),
+            "93.184.216.34",
+            443,
+        )
+        with self.assertRaisesRegex(WebPageError, "research policy"):
+            fetch_public_resource(
+                "https://allowed.example/start",
+                allowed_content_types={"text/html"},
+                blocked_domains=["blocked.example"],
+            )
 
     @patch("ai.web_reader._fetch_url")
     @override_settings(WEB_READER_MAX_TEXT_CHARS=30000)

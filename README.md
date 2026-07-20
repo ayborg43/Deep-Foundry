@@ -7,6 +7,12 @@ a publishing SDK, integrations, browser voice controls, a permission-gated deskt
 companion, and cloud or self-hosted DeepSeek routing. Approved Python execution
 runs in a fresh networkless, resource-limited sandbox container for every call.
 
+The Research workspace provides citation-backed deep research, responsible
+robots-aware domain crawling, structured JSON/CSV extraction, public document
+reading, scheduled website change monitoring, and an explicitly enabled
+JavaScript browser isolated behind a private validating egress proxy. Research
+reports retain the exact source passages used for important claims.
+
 Phase 3 adds enterprise SSO/SCIM, delegated governance, residency and SLA policy,
 audit anomaly detection and evidence exports, dependency-scored paid Marketplace
 packages with creator payouts, portable coworkers, conditional workflows, and

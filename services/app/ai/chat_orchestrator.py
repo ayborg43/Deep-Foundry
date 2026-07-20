@@ -18,6 +18,7 @@ call that finds different data already in Postgres.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -50,6 +51,8 @@ from core.interface import (
     write_audit_log,
 )
 from core.permissions import resolve_tool_permission
+
+logger = logging.getLogger(__name__)
 
 # Bounds one invocation's model-call <-> tool-call cycles. Each call to
 # start_turn/resume_turn gets its own fresh budget — this guards against a
@@ -273,7 +276,7 @@ def _continue_turn(
         assistant_content = "".join(content_parts)
 
         if not final_tool_calls:
-            Message.objects.create(
+            completed_message = Message.objects.create(
                 conversation=conversation,
                 sender_type=Message.SenderType.COWORKER,
                 sender_id=coworker_id,
@@ -281,6 +284,21 @@ def _continue_turn(
                 status=Message.Status.COMPLETE,
                 parent_message=link_new_message_to,
             )
+            from research.citations import attach_message_citations
+
+            # Citation enrichment must never turn a successfully generated
+            # answer into a failed chat turn. The source panel is additive;
+            # malformed legacy tool output is safely ignored.
+            try:
+                citations = attach_message_citations(
+                    completed_message,
+                    query=latest_user.content if latest_user is not None else "",
+                )
+            except Exception:
+                logger.exception(
+                    "Unable to attach citations to message %s", completed_message.id
+                )
+                citations = []
             if latest_user is not None and not MemoryEntry.objects.filter(
                 workspace_id=workspace_id,
                 scope=MemoryEntry.Scope.COWORKER,
@@ -293,7 +311,14 @@ def _continue_turn(
                     conversation_id=latest_user.id, user_content=latest_user.content,
                     assistant_content=assistant_content,
                 )
-            yield ChatEvent("message_complete", {"content": assistant_content})
+            yield ChatEvent(
+                "message_complete",
+                {
+                    "content": assistant_content,
+                    "message_id": str(completed_message.id),
+                    "citation_count": len(citations),
+                },
+            )
             return
 
         assistant_message = Message.objects.create(

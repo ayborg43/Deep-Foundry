@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.chat_views import (
@@ -130,6 +130,7 @@ from core.v4_views import (
 )
 
 urlpatterns = [
+    path("", include("research.urls")),
     path("auth/register", RegisterView.as_view(), name="auth-register"),
     path("auth/login", LoginView.as_view(), name="auth-login"),
     path("auth/logout", LogoutView.as_view(), name="auth-logout"),

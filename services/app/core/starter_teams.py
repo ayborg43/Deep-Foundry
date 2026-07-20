@@ -254,6 +254,12 @@ def provision_team(
                 created_by=created_by,
             )
             tool_names = list(member["tools"])
+            if "web_search" in tool_names:
+                tool_names += [
+                    name
+                    for name in ("read_webpage", "read_document", "crawl_website", "extract_structured_data")
+                    if name not in tool_names
+                ]
             # Managers (and a solo coworker) also get the orchestration
             # tools, so the workspace can be driven from a chat with them.
             if member["team_role"] == AgentTeamMember.Role.MANAGER or len(cleaned["coworkers"]) == 1:

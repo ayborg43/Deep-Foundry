@@ -12,7 +12,9 @@ import http.client
 import ipaddress
 import socket
 import ssl
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -25,13 +27,19 @@ class WebPageError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class _FetchedPage:
+class PublicResource:
     requested_url: str
     final_url: str
     status_code: int
     content_type: str
     charset: str
     body: bytes
+    headers: dict[str, str] = field(default_factory=dict)
+
+
+# Compatibility for existing tests and internal callers while the public
+# fetch primitive now has a clearer name.
+_FetchedPage = PublicResource
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):
@@ -130,24 +138,68 @@ def _validated_target(url: str) -> tuple[Any, str, int]:
     return parsed, preferred, port
 
 
-def _request_once(url: str) -> tuple[int, dict[str, str], bytes]:
+def validate_public_url(url: str) -> str:
+    """Validate and normalize a user-supplied public URL without fetching it."""
+    parsed, _, _ = _validated_target(url)
+    return urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc,
+            parsed.path or "/",
+            parsed.query,
+            "",
+        )
+    )
+
+
+def _blocked_by_domain_policy(url: str, blocked_domains: list[str] | None) -> bool:
+    if not blocked_domains:
+        return False
+    host = (urlsplit(url).hostname or "").rstrip(".").lower()
+    try:
+        host = host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return True
+    for raw_rule in blocked_domains[:100]:
+        rule = str(raw_rule or "").strip().lower().lstrip(".").rstrip(".")
+        if "://" in rule:
+            rule = (urlsplit(rule).hostname or "").lower()
+        try:
+            rule = rule.encode("idna").decode("ascii")
+        except UnicodeError:
+            continue
+        if rule and (host == rule or host.endswith(f".{rule}")):
+            return True
+    return False
+
+
+def _request_once(
+    url: str,
+    *,
+    max_bytes: int,
+    accept: str,
+    deadline: float,
+) -> tuple[int, dict[str, str], bytes]:
     parsed, resolved_ip, port = _validated_target(url)
     hostname = parsed.hostname.rstrip(".").encode("idna").decode("ascii")
     host_header = f"[{hostname}]" if ":" in hostname else hostname
     connection_type = (
         _PinnedHTTPSConnection if parsed.scheme.lower() == "https" else _PinnedHTTPConnection
     )
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise WebPageError("The webpage request exceeded the total time limit.")
     connection = connection_type(
         hostname,
         resolved_ip,
         port,
-        timeout=settings.WEB_READER_TIMEOUT_SECONDS,
+        timeout=min(settings.WEB_READER_TIMEOUT_SECONDS, remaining),
     )
     path = parsed.path or "/"
     if parsed.query:
         path = f"{path}?{parsed.query}"
     headers = {
-        "Accept": "text/html, application/xhtml+xml, text/plain, application/json;q=0.9",
+        "Accept": accept,
         "Accept-Encoding": "identity",
         "Connection": "close",
         "Host": host_header,
@@ -160,26 +212,68 @@ def _request_once(url: str) -> tuple[int, dict[str, str], bytes]:
         content_length = response_headers.get("content-length")
         if content_length:
             try:
-                if int(content_length) > settings.WEB_READER_MAX_RESPONSE_BYTES:
+                if int(content_length) > max_bytes:
                     raise WebPageError("The webpage response exceeds the configured size limit.")
             except ValueError:
                 pass
-        body = response.read(settings.WEB_READER_MAX_RESPONSE_BYTES + 1)
-        if len(body) > settings.WEB_READER_MAX_RESPONSE_BYTES:
-            raise WebPageError("The webpage response exceeds the configured size limit.")
-        return response.status, response_headers, body
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise WebPageError("The webpage request exceeded the total time limit.")
+            if connection.sock is not None:
+                connection.sock.settimeout(
+                    min(settings.WEB_READER_TIMEOUT_SECONDS, remaining)
+                )
+            chunk = response.read1(min(64 * 1024, max_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > max_bytes:
+                raise WebPageError("The webpage response exceeds the configured size limit.")
+        return response.status, response_headers, b"".join(chunks)
     except (OSError, http.client.HTTPException, TimeoutError) as exc:
         raise WebPageError(f"The webpage request failed: {exc}") from exc
     finally:
         connection.close()
 
 
-def _fetch_url(url: str) -> _FetchedPage:
+def fetch_public_resource(
+    url: str,
+    *,
+    allowed_content_types: set[str],
+    max_bytes: int | None = None,
+    accept: str = "*/*",
+    allowed_statuses: set[int] | None = None,
+    blocked_domains: list[str] | None = None,
+) -> PublicResource:
+    """Fetch one public resource through the shared SSRF-resistant boundary.
+
+    Callers provide an explicit MIME allowlist and size bound. Every redirect
+    is resolved and revalidated, and one wall-clock deadline covers the entire
+    redirect chain.
+    """
     requested_url = str(url).strip()
     current_url = requested_url
     redirects = 0
+    byte_limit = max_bytes or settings.WEB_READER_MAX_RESPONSE_BYTES
+    if byte_limit < 1 or byte_limit > settings.WEB_DOCUMENT_MAX_RESPONSE_BYTES:
+        raise WebPageError("The requested response-size limit is invalid.")
+    deadline = time.monotonic() + settings.WEB_FETCH_TOTAL_TIMEOUT_SECONDS
+    accepted_statuses = allowed_statuses or set()
     while True:
-        status, headers, body = _request_once(current_url)
+        if time.monotonic() >= deadline:
+            raise WebPageError("The webpage request exceeded the total time limit.")
+        if _blocked_by_domain_policy(current_url, blocked_domains):
+            raise WebPageError("The destination is blocked by the workspace research policy.")
+        status, headers, body = _request_once(
+            current_url,
+            max_bytes=byte_limit,
+            accept=accept,
+            deadline=deadline,
+        )
         if status in {301, 302, 303, 307, 308}:
             location = headers.get("location")
             if not location:
@@ -195,8 +289,12 @@ def _fetch_url(url: str) -> _FetchedPage:
                 raise WebPageError("HTTPS webpages cannot redirect to insecure HTTP.")
             current_url = redirected_url
             _validated_target(current_url)
+            if _blocked_by_domain_policy(current_url, blocked_domains):
+                raise WebPageError(
+                    "The redirect destination is blocked by the workspace research policy."
+                )
             continue
-        if status < 200 or status >= 300:
+        if (status < 200 or status >= 300) and status not in accepted_statuses:
             raise WebPageError(f"The webpage returned HTTP {status}.")
 
         encoding = headers.get("content-encoding", "identity").lower()
@@ -204,15 +302,9 @@ def _fetch_url(url: str) -> _FetchedPage:
             raise WebPageError(f"Unsupported webpage content encoding {encoding!r}.")
         raw_content_type = headers.get("content-type", "text/html")
         media_type = raw_content_type.split(";", 1)[0].strip().lower()
-        allowed_types = {
-            "text/html",
-            "application/xhtml+xml",
-            "text/plain",
-            "application/json",
-        }
-        if media_type not in allowed_types:
+        if media_type not in allowed_content_types:
             raise WebPageError(
-                f"Unsupported webpage content type {media_type!r}; only textual pages can be read."
+                f"Unsupported webpage content type {media_type!r}."
             )
         charset = "utf-8"
         for parameter in raw_content_type.split(";")[1:]:
@@ -220,14 +312,31 @@ def _fetch_url(url: str) -> _FetchedPage:
             if separator and key.lower() == "charset" and value.strip():
                 charset = value.strip().strip("\"'")
                 break
-        return _FetchedPage(
+        return PublicResource(
             requested_url=requested_url,
             final_url=current_url,
             status_code=status,
             content_type=media_type,
             charset=charset,
             body=body,
+            headers=headers,
         )
+
+
+def _fetch_url(
+    url: str, *, blocked_domains: list[str] | None = None
+) -> PublicResource:
+    return fetch_public_resource(
+        url,
+        allowed_content_types={
+            "text/html",
+            "application/xhtml+xml",
+            "text/plain",
+            "application/json",
+        },
+        accept="text/html, application/xhtml+xml, text/plain, application/json;q=0.9",
+        blocked_domains=blocked_domains,
+    )
 
 
 _BLOCK_TAGS = {
@@ -287,6 +396,8 @@ class _ReadableHTMLParser(HTMLParser):
         self.description = ""
         self.canonical_url = ""
         self.language = ""
+        self.publisher = ""
+        self.published_at = ""
         self.headings: list[dict[str, str | int]] = []
         self.links: list[dict[str, str]] = []
         self._all_parts: list[str] = []
@@ -324,6 +435,18 @@ class _ReadableHTMLParser(HTMLParser):
             if name == "description" or property_name == "og:description":
                 if not self.description:
                     self.description = " ".join(values.get("content", "").split())[:1000]
+            if name in {"author", "publisher", "application-name"} or property_name in {
+                "og:site_name",
+                "article:publisher",
+            }:
+                if not self.publisher:
+                    self.publisher = " ".join(values.get("content", "").split())[:255]
+            if name in {"date", "datepublished", "pubdate", "publish-date"} or property_name in {
+                "article:published_time",
+                "og:published_time",
+            }:
+                if not self.published_at:
+                    self.published_at = values.get("content", "").strip()[:100]
         elif tag == "link" and "canonical" in values.get("rel", "").lower().split():
             candidate = urljoin(self.base_url, values.get("href", ""))
             if urlsplit(candidate).scheme in {"http", "https"}:
@@ -402,7 +525,12 @@ class _ReadableHTMLParser(HTMLParser):
         return preferred or _clean_text(self._all_parts)
 
 
-def read_webpage(url: str, *, max_chars: int | None = None) -> dict[str, Any]:
+def read_webpage(
+    url: str,
+    *,
+    max_chars: int | None = None,
+    blocked_domains: list[str] | None = None,
+) -> dict[str, Any]:
     limit = max_chars if max_chars is not None else settings.WEB_READER_MAX_TEXT_CHARS
     if isinstance(limit, bool) or not isinstance(limit, int):
         raise WebPageError("max_chars must be an integer.")
@@ -411,7 +539,7 @@ def read_webpage(url: str, *, max_chars: int | None = None) -> dict[str, Any]:
             f"max_chars must be between 1,000 and {settings.WEB_READER_MAX_TEXT_CHARS:,}."
         )
 
-    fetched = _fetch_url(url)
+    fetched = _fetch_url(url, blocked_domains=blocked_domains)
     try:
         decoded = fetched.body.decode(fetched.charset, errors="replace")
     except LookupError:
@@ -423,6 +551,8 @@ def read_webpage(url: str, *, max_chars: int | None = None) -> dict[str, Any]:
     language = ""
     headings: list[dict[str, str | int]] = []
     links: list[dict[str, str]] = []
+    publisher = ""
+    published_at = ""
     if fetched.content_type in {"text/html", "application/xhtml+xml"}:
         parser = _ReadableHTMLParser(fetched.final_url)
         parser.feed(decoded)
@@ -434,6 +564,8 @@ def read_webpage(url: str, *, max_chars: int | None = None) -> dict[str, Any]:
         language = parser.language
         headings = parser.headings
         links = parser.links
+        publisher = parser.publisher
+        published_at = parser.published_at
     else:
         text = decoded.strip()
 
@@ -449,6 +581,10 @@ def read_webpage(url: str, *, max_chars: int | None = None) -> dict[str, Any]:
         "language": language,
         "title": title,
         "description": description,
+        "publisher": publisher,
+        "published_at": published_at,
+        "accessed_at": datetime.now().astimezone().isoformat(),
+        "last_modified": fetched.headers.get("last-modified", ""),
         "text": text,
         "headings": headings,
         "links": links,

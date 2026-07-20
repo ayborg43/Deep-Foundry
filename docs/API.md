@@ -108,6 +108,33 @@ PATCH  /api/v1/messages/{id}                            ({content} — user's ow
 
 **SSE event types:** `token` (`{delta}`), `tool_call_started` (`{tool_name, arguments, message_id}`), `tool_call_result` (`{tool_name, result, message_id}`), `approval_required` (`{approval_request_id, tool_name, arguments, message_id}` — what the Chat UI uses to render an inline approval prompt per `SOUL.md` §6.3, without polling), `message_complete` (`{content}`), `error` (`{detail}`).
 
+Completed assistant messages may include `citations[]`. Each citation contains a
+stable ordinal, source URL/title/publisher, publication and access dates, exact
+supporting passage, and document locator/page number when available.
+
+### Research and monitoring
+
+```text
+GET|POST /api/v1/research-runs
+GET|PATCH /api/v1/research-runs/{id}                 (PATCH {cancel:true})
+GET       /api/v1/research-runs/{id}/sources
+GET       /api/v1/research-runs/{id}/exports/{json|csv|markdown}
+
+GET|POST   /api/v1/website-monitors
+GET|PATCH|DELETE /api/v1/website-monitors/{id}
+POST       /api/v1/website-monitors/{id}/run
+GET        /api/v1/website-monitors/{id}/history
+
+GET|PUT /api/v1/workspaces/{workspace_id}/research-policy
+```
+
+Research creation accepts `mode: deep|crawl|extraction`, a question or starting
+URL, an optional coworker, and bounded controls for source diversity, recency,
+language/country, trusted/blocked domains, crawl pages/depth/rate, explicit
+browser rendering, and a shallow extraction schema. Runs are Celery-backed and
+return immediately with durable status and progress. All endpoints enforce
+workspace membership.
+
 **Approval gate endpoints**, per `SECURITY.md` §4:
 ```
 GET    /api/v1/workspaces/{workspace_id}/approval-requests?status=pending

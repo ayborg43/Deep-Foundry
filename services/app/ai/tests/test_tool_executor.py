@@ -3,13 +3,13 @@ import uuid
 from pathlib import Path
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 
 from ai.tool_executor import ToolExecutionError, execute_tool
 from ai.sandbox import SandboxResult
 
 
-class ToolExecutorTests(SimpleTestCase):
+class ToolExecutorTests(TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -47,6 +47,7 @@ class ToolExecutorTests(SimpleTestCase):
         read_webpage.assert_called_once_with(
             "https://example.com/report",
             max_chars=5000,
+            blocked_domains=[],
         )
 
     def test_write_then_read_file_round_trips(self):

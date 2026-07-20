@@ -120,6 +120,26 @@ hold a continuous voice session through the same trust controls as chat.
 
 ## Cross-Cutting Workstreams (run throughout every phase, not phase-gated)
 
+### Research suite
+
+**Implementation status:** Complete in the repository.
+
+- Citation records retain source URL/title, publication and access dates, exact
+  supporting passages, and PDF page/section locators. Chat answers and reports
+  expose a responsive “View sources” panel.
+- Durable deep-research runs plan queries, search and read diverse sources,
+  compare conflicts, show checkpointed progress, warn on weak evidence, and
+  export Markdown/JSON or structured CSV.
+- Daily/weekly website monitors preserve bounded snapshot history, detect
+  meaningful text changes, show diffs, and notify only the monitor owner.
+- Responsible same-domain crawling supports robots handling, sitemap discovery,
+  page/depth/time/rate limits, caching, and duplicate suppression.
+- Public PDF, DOCX, CSV, JSON, text, HTML, and XHTML research retains document
+  locators. JavaScript rendering is separately enabled and isolated behind a
+  validating egress proxy.
+- Research controls cover trusted/blocked domains, source diversity, recency,
+  language, country, conflict detection, and quality warnings.
+
 - **Documentation discipline** per `SOUL.md` §20 Development Rules — every phase's features update the relevant document(s) in the same change set, not as a follow-up.
 - **Community/open-source health** — self-hosted install feedback loop, contribution velocity, SDK ergonomics feedback — tracked from Phase 1 onward even though the Marketplace itself doesn't ship until Phase 2, so the community pipeline isn't cold-started at V2 launch.
 - **Security review** — `SECURITY.md` controls are not phased; every phase's new surface area (Marketplace in V2, Desktop Companion in V2, SSO in V3) gets a security review against the existing threat model before shipping, not after.

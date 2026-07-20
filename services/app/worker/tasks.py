@@ -72,6 +72,41 @@ def detect_audit_anomalies_task() -> int:
 
 
 @app.task(
+    name="worker.execute_research_run",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=2,
+)
+def execute_research_run(run_id: str) -> None:
+    from research.services import execute_research_run as execute
+
+    execute(run_id)
+
+
+@app.task(name="worker.evaluate_due_website_monitors")
+def evaluate_due_website_monitors() -> int:
+    from research.services import evaluate_due_monitors
+
+    return evaluate_due_monitors()
+
+
+@app.task(
+    name="worker.execute_website_monitor",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=2,
+)
+def execute_website_monitor(self, check_id: str) -> None:
+    from research.services import execute_monitor_run
+
+    execute_monitor_run(
+        check_id,
+        final_attempt=self.request.retries >= self.max_retries,
+    )
+
+
+@app.task(
     name="worker.dispatch_notification_email",
     autoretry_for=(Exception,),
     retry_backoff=True,
@@ -100,6 +135,27 @@ def dispatch_notification_email(notification_id: str) -> None:
                 f"A coworker needs approval to call {payload.get('tool_name', 'a tool')} "
                 f"while working on {title}.\n\n"
                 f"Review it: {settings.WEB_APP_URL}/approvals"
+            )
+        elif notification.type == Notification.Type.RESEARCH_COMPLETED:
+            subject = f"Research completed: {title}"
+            message = (
+                f"Your research report '{title}' is ready.\n\n"
+                f"View it: {settings.WEB_APP_URL}/research/{payload.get('research_run_id')}"
+            )
+        elif notification.type == Notification.Type.WEBSITE_CHANGED:
+            subject = f"Website changed: {title}"
+            message = (
+                f"{payload.get('change_summary', 'A monitored website changed.')}.\n\n"
+                f"View it: {settings.WEB_APP_URL}/research/monitors/"
+                f"{payload.get('monitor_id')}"
+            )
+        elif notification.type == Notification.Type.MONITOR_FAILED:
+            subject = f"Website monitor failed: {title}"
+            message = (
+                f"The monitor could not check {payload.get('url', 'the website')}.\n"
+                f"{payload.get('error', '')}\n\n"
+                f"Review it: {settings.WEB_APP_URL}/research/monitors/"
+                f"{payload.get('monitor_id')}"
             )
         else:
             subject = f"Task {payload.get('status', 'updated')}: {title}"

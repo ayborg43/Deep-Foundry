@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "core",
     "ai",
+    "research",
 ]
 
 MIDDLEWARE = [
@@ -197,6 +198,78 @@ WEB_READER_USER_AGENT = os.environ.get(
     "WEB_READER_USER_AGENT",
     "Deep-Foundry/1.0 (public webpage reader)",
 )
+WEB_FETCH_TOTAL_TIMEOUT_SECONDS = float(
+    os.environ.get("WEB_FETCH_TOTAL_TIMEOUT_SECONDS", "30")
+)
+WEB_DOCUMENT_MAX_RESPONSE_BYTES = int(
+    os.environ.get("WEB_DOCUMENT_MAX_RESPONSE_BYTES", str(25 * 1024 * 1024))
+)
+
+# Responsible research crawling. Crawls execute in Celery and share Redis
+# pacing/cache state across worker replicas.
+CRAWLER_MAX_PAGES = int(os.environ.get("CRAWLER_MAX_PAGES", "50"))
+CRAWLER_MAX_DEPTH = int(os.environ.get("CRAWLER_MAX_DEPTH", "3"))
+CRAWLER_MAX_DURATION_SECONDS = float(
+    os.environ.get("CRAWLER_MAX_DURATION_SECONDS", "60")
+)
+CRAWLER_MAX_RATE_LIMIT_SECONDS = float(
+    os.environ.get("CRAWLER_MAX_RATE_LIMIT_SECONDS", "10")
+)
+CRAWLER_MAX_ROBOTS_BYTES = int(
+    os.environ.get("CRAWLER_MAX_ROBOTS_BYTES", str(512 * 1024))
+)
+CRAWLER_MAX_SITEMAP_BYTES = int(
+    os.environ.get("CRAWLER_MAX_SITEMAP_BYTES", str(2 * 1024 * 1024))
+)
+CRAWLER_MAX_SITEMAPS = int(os.environ.get("CRAWLER_MAX_SITEMAPS", "5"))
+CRAWLER_MAX_SITEMAP_URLS = int(os.environ.get("CRAWLER_MAX_SITEMAP_URLS", "500"))
+CRAWLER_ROBOTS_CACHE_SECONDS = int(
+    os.environ.get("CRAWLER_ROBOTS_CACHE_SECONDS", "86400")
+)
+CRAWLER_PAGE_CACHE_SECONDS = int(
+    os.environ.get("CRAWLER_PAGE_CACHE_SECONDS", "3600")
+)
+
+# Public document extraction bounds.
+DOCUMENT_MAX_TEXT_CHARS = int(os.environ.get("DOCUMENT_MAX_TEXT_CHARS", "200000"))
+DOCUMENT_MAX_PAGES = int(os.environ.get("DOCUMENT_MAX_PAGES", "300"))
+DOCUMENT_MAX_CSV_ROWS = int(os.environ.get("DOCUMENT_MAX_CSV_ROWS", "5000"))
+DOCUMENT_MAX_CELL_CHARS = int(os.environ.get("DOCUMENT_MAX_CELL_CHARS", "10000"))
+DOCUMENT_MAX_ZIP_MEMBERS = int(os.environ.get("DOCUMENT_MAX_ZIP_MEMBERS", "1000"))
+DOCUMENT_MAX_UNCOMPRESSED_BYTES = int(
+    os.environ.get("DOCUMENT_MAX_UNCOMPRESSED_BYTES", str(100 * 1024 * 1024))
+)
+
+# Bounded structured extraction.
+EXTRACTION_MAX_FIELDS = int(os.environ.get("EXTRACTION_MAX_FIELDS", "50"))
+EXTRACTION_MAX_ARRAY_ITEMS = int(os.environ.get("EXTRACTION_MAX_ARRAY_ITEMS", "100"))
+EXTRACTION_MAX_VALUE_CHARS = int(os.environ.get("EXTRACTION_MAX_VALUE_CHARS", "10000"))
+EXTRACTION_MAX_INPUT_CHARS = int(os.environ.get("EXTRACTION_MAX_INPUT_CHARS", "60000"))
+
+# Isolated JavaScript browser client. Chromium has no direct egress in Compose;
+# it reaches the internet only through the public-address-validating proxy.
+BROWSER_SERVICE_URL = os.environ.get("BROWSER_SERVICE_URL", "")
+BROWSER_SERVICE_TOKEN = os.environ.get(
+    "BROWSER_SERVICE_TOKEN", os.environ.get("INTERNAL_API_TOKEN", "")
+)
+BROWSER_SERVICE_TIMEOUT_SECONDS = float(
+    os.environ.get("BROWSER_SERVICE_TIMEOUT_SECONDS", "25")
+)
+BROWSER_SERVICE_MAX_RESPONSE_BYTES = int(
+    os.environ.get("BROWSER_SERVICE_MAX_RESPONSE_BYTES", str(2 * 1024 * 1024))
+)
+
+# Website monitoring comparison and retention.
+MONITOR_MEANINGFUL_CHANGE_RATIO = float(
+    os.environ.get("MONITOR_MEANINGFUL_CHANGE_RATIO", "0.01")
+)
+MONITOR_MAX_DIFF_LINES = int(os.environ.get("MONITOR_MAX_DIFF_LINES", "500"))
+MONITOR_MAX_SNAPSHOT_CHARS = int(
+    os.environ.get("MONITOR_MAX_SNAPSHOT_CHARS", "500000")
+)
+MONITOR_SNAPSHOT_RETENTION = int(
+    os.environ.get("MONITOR_SNAPSHOT_RETENTION", "50")
+)
 
 # Instance-wide DeepSeek Cloud key. When set, it's the default for every
 # workspace that hasn't configured its own ProviderCredential — so a
@@ -237,6 +310,10 @@ CELERY_BEAT_SCHEDULE = {
     "detect-audit-anomalies": {
         "task": "worker.detect_audit_anomalies",
         "schedule": 300.0,
+    },
+    "evaluate-due-website-monitors": {
+        "task": "worker.evaluate_due_website_monitors",
+        "schedule": 60.0,
     },
 }
 

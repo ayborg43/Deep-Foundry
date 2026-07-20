@@ -55,7 +55,21 @@ export function NotificationBell() {
             <p className="px-2 py-4 text-sm text-muted-foreground">You&apos;re all caught up.</p>
           ) : (
             items.slice(0, 8).map((item) => {
-              const href = item.type === "approval_requested" ? "/approvals" : `/tasks/${item.payload.task_id}`;
+              const href =
+                item.type === "approval_requested" ? "/approvals" :
+                item.type === "research_completed" && item.payload.research_run_id ? `/research/${item.payload.research_run_id}` :
+                (item.type === "website_changed" || item.type === "monitor_failed") && item.payload.monitor_id ? `/research/monitors/${item.payload.monitor_id}` :
+                item.payload.task_id ? `/tasks/${item.payload.task_id}` : "/home";
+              const detail =
+                item.type === "approval_requested"
+                  ? `Approval needed for ${item.payload.tool_name ?? "a tool"}`
+                  : item.type === "research_completed"
+                    ? "Research report is ready"
+                    : item.type === "website_changed"
+                      ? item.payload.change_summary ?? "Meaningful website changes detected"
+                      : item.type === "monitor_failed"
+                        ? "Website check failed"
+                        : `Task ${item.payload.status ?? "updated"}`;
               return (
                 <Link
                   key={item.id}
@@ -64,11 +78,7 @@ export function NotificationBell() {
                   onClick={() => void markRead(item)}
                 >
                   <p className="text-sm font-medium">{item.payload.title ?? "Task update"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.type === "approval_requested"
-                      ? `Approval needed for ${item.payload.tool_name ?? "a tool"}`
-                      : `Task ${item.payload.status ?? "updated"}`}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{detail}</p>
                 </Link>
               );
             })

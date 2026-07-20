@@ -82,3 +82,31 @@ export async function apiFetch<T = unknown>(
 
   return data as T;
 }
+
+export async function apiDownload(path: string, fallbackName: string): Promise<void> {
+  const tokens = getTokens();
+  const headers = new Headers();
+  if (tokens?.access) headers.set("Authorization", `Bearer ${tokens.access}`);
+  const response = await fetch(`${API_BASE_URL}/api/v1${path}`, { headers });
+  if (!response.ok) {
+    let message = "Couldn't download this file.";
+    try {
+      const body = (await response.json()) as ApiErrorBody & { detail?: string };
+      message = body.error?.message ?? body.detail ?? message;
+    } catch {
+      // Keep the safe fallback for non-JSON proxy errors.
+    }
+    throw new ApiRequestError(response.status, "download_failed", message);
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? fallbackName;
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}

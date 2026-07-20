@@ -35,13 +35,24 @@ _TOOL_ALIASES = {
     "internet_search": "web_search", "web_browsing": "web_search", "browse": "web_search",
     "scrape": "read_webpage", "scraper": "read_webpage", "web_scraping": "read_webpage",
     "read_url": "read_webpage", "fetch_url": "read_webpage", "website_reader": "read_webpage",
+    "pdf_reader": "read_document", "document_reader": "read_document", "read_pdf": "read_document",
+    "crawl": "crawl_website", "crawler": "crawl_website", "site_crawl": "crawl_website",
+    "extract": "extract_structured_data", "structured_extraction": "extract_structured_data",
+    "javascript_browser": "browse_webpage", "render_webpage": "browse_webpage",
     "read": "read_file", "file_read": "read_file", "read_files": "read_file",
     "write": "write_file", "file_write": "write_file", "write_files": "write_file",
     "email": "send_email", "mail": "send_email", "send_mail": "send_email",
 }
 # When the model leaves a coworker tool-less, give it these (approval-free)
 # defaults so it can still do useful work.
-_DEFAULT_SAFE_TOOLS = ("web_search", "read_webpage", "read_file", "write_file")
+_DEFAULT_SAFE_TOOLS = (
+    "web_search",
+    "read_webpage",
+    "read_document",
+    "extract_structured_data",
+    "read_file",
+    "write_file",
+)
 _CODE_HINTS = ("develop", "engineer", "test", "code", "program", "build")
 
 

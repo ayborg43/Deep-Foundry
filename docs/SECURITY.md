@@ -59,6 +59,23 @@ new child container and is force-removed after completion or timeout.
 - Webpage text is always treated as untrusted evidence. Coworker system guidance
   explicitly rejects instructions embedded in search results or page content;
   normal Tool permission and approval rules still apply to any subsequent action.
+- Every research fetch, document download, crawler request, sitemap/robots request,
+  monitor check, and pre/post browser navigation validation uses the same
+  public-address policy. Redirects are revalidated, standard ports are enforced,
+  DNS is pinned for direct HTTP reads, response types and sizes are bounded, and
+  non-public or mixed public/private DNS results fail closed.
+- Domain crawling stays on the exact starting host, honors `robots.txt`, discovers
+  bounded sitemap URLs, rate-limits per domain, caps page/depth/time budgets, and
+  suppresses URL and content duplicates. A missing `robots.txt` permits crawling;
+  authorization errors and server failures fail closed.
+- JavaScript rendering is a separate `sensitive` tool and is not attached by
+  default. The browser runs as an unprivileged user with a read-only root,
+  dropped capabilities, resource limits, downloads and service workers disabled,
+  a fresh context per request, and no direct egress. Its only network path is an
+  authenticated proxy that resolves and pins a globally routable destination.
+- Public documents are parsed under page, row, cell, ZIP-member, uncompressed-size,
+  and compression-ratio limits. DOCX XML uses a hardened parser, and exported CSV
+  cells beginning with spreadsheet formula characters are escaped.
 - **Resource limits:** CPU, memory, execution time, and disk are capped per sandbox invocation; a runaway process is killed and reported as a failed Tool call, not left to consume resources indefinitely.
 - **No sandbox-to-sandbox communication** and no access to the host's credentials, other workspaces' data, or the platform's own internal network by default.
 - The controller daemon requires a privileged container on the self-hosted host;

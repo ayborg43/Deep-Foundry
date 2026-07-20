@@ -69,6 +69,19 @@ Linux capabilities, and CPU, memory, PID, time, and output caps. Never expose po
 2375 or attach `sandboxd` to a public network. Its image-cache volume is disposable
 and does not contain application data.
 
+Research adds `browserd` and `browser-proxy` services. Neither publishes a host
+port. `browserd` has no direct external network and can only reach the private
+proxy; the proxy is the only component on the research egress network. Keep
+`BROWSER_SERVICE_TOKEN`/`INTERNAL_API_TOKEN` private and do not attach `browserd`
+to the default application or public gateway network. The Playwright image is
+large, so allow extra time and disk space for its first build.
+
+The defaults in `infra/.env.example` bound webpage/document bytes, crawler
+pages/depth/duration/cache lifetime, and browser time/text/HTML/request budgets.
+Operators may lower these limits for small VPS hosts. Review the SSRF and resource
+controls in [SECURITY.md](SECURITY.md#5-sandboxing--code-execution) before raising
+them.
+
 ## 3. Raw Docker Compose fallback
 
 Install Docker Engine/Compose and place your TLS reverse proxy in front of port
@@ -141,6 +154,13 @@ container updates promptly, and never expose MinIO's console publicly.
 - Attach `read_webpage`, read a public HTML page, and confirm it returns the final
   URL, title, headings, links, and bounded readable text. Confirm a loopback or
   private-network URL is rejected.
+- Open Research, run a cited report against a public question, and confirm the
+  evidence panel shows URL, title, publication/access dates, and exact passages.
+- Crawl a small public site and verify page/depth caps. Create a website monitor,
+  run it once for a baseline, and confirm its retained history appears.
+- Explicitly enable the JavaScript browser on a test run and confirm `browserd`
+  remains internal. Confirm loopback, cloud metadata, and private-address
+  destinations are rejected on every fetching path.
 - Approve or deny from both inline Chat and the Approval Inbox using only a keyboard.
 - Confirm the event appears in Audit and the model call appears in Usage.
 - Restart the stack and confirm all persistent data remains.

@@ -23,6 +23,10 @@ const SECTIONS: Section[] = [
     { href: "/memory", label: "Memory" },
     { href: "/artifacts", label: "Artifacts" },
   ] },
+  { items: [
+    { href: "/research", label: "Research" },
+    { href: "/research/monitors", label: "Website monitors" },
+  ] },
 ];
 
 function matches(pathname: string, href: string) {
@@ -33,12 +37,15 @@ export function SectionTabs() {
   const pathname = usePathname();
   const section = SECTIONS.find((s) => s.items.some((item) => matches(pathname, item.href)));
   if (!section) return null;
+  const activeHref = section.items
+    .filter((item) => matches(pathname, item.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   return (
     <div className="border-b border-border/70 bg-background/60 px-4">
       <nav aria-label="Section navigation" className="-mb-px flex gap-1 overflow-x-auto">
         {section.items.map((item) => {
-          const active = matches(pathname, item.href);
+          const active = item.href === activeHref;
           return (
             <Link
               key={item.href}

@@ -41,6 +41,7 @@ const TITLES: [string, string][] = [
   ["/tasks", "Tasks"],
   ["/approvals", "Tasks"],
   ["/conversations", "Conversations"],
+  ["/research", "Research"],
   ["/knowledge", "Knowledge"],
   ["/memory", "Knowledge"],
   ["/artifacts", "Knowledge"],

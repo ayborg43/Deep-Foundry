@@ -61,6 +61,62 @@ services:
       retries: 20
       start_period: 15s
 
+  browser-proxy:
+    build:
+      context: ../services/browser-proxy
+    restart: unless-stopped
+    environment:
+      BROWSER_PROXY_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-internal-token-change-in-production}
+      PROXY_CONNECT_TIMEOUT_SECONDS: ${PROXY_CONNECT_TIMEOUT_SECONDS:-10}
+      PROXY_IDLE_TIMEOUT_SECONDS: ${PROXY_IDLE_TIMEOUT_SECONDS:-20}
+      BROWSER_MAX_TRANSFER_BYTES: ${BROWSER_MAX_TRANSFER_BYTES:-26214400}
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 128m
+    cpus: 0.50
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    networks:
+      - browser_proxy
+      - browser_egress
+
+  browserd:
+    build:
+      context: ../services/browser
+    restart: unless-stopped
+    environment:
+      BROWSER_SERVICE_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-internal-token-change-in-production}
+      BROWSER_PROXY_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-internal-token-change-in-production}
+      BROWSER_PROXY_URL: http://browser-proxy:8080
+      BROWSER_TIMEOUT_MS: ${BROWSER_TIMEOUT_MS:-20000}
+      BROWSER_MAX_TEXT_CHARS: ${BROWSER_MAX_TEXT_CHARS:-30000}
+      BROWSER_MAX_HTML_CHARS: ${BROWSER_MAX_HTML_CHARS:-2000000}
+      BROWSER_MAX_REQUESTS: ${BROWSER_MAX_REQUESTS:-100}
+      BROWSER_MAX_TRANSFER_BYTES: ${BROWSER_MAX_TRANSFER_BYTES:-26214400}
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+    shm_size: 128m
+    tmpfs:
+      - /tmp:size=128m,nosuid,nodev
+      - /home/pwuser/.cache:size=32m,nosuid,nodev
+    depends_on:
+      - browser-proxy
+    networks:
+      - browser_control
+      - browser_proxy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
   app:
     image: agentarium-app:local
     build:
@@ -108,6 +164,14 @@ services:
       WEB_READER_MAX_RESPONSE_BYTES: ${WEB_READER_MAX_RESPONSE_BYTES:-2097152}
       WEB_READER_MAX_TEXT_CHARS: ${WEB_READER_MAX_TEXT_CHARS:-30000}
       WEB_READER_MAX_REDIRECTS: ${WEB_READER_MAX_REDIRECTS:-3}
+      WEB_FETCH_TOTAL_TIMEOUT_SECONDS: ${WEB_FETCH_TOTAL_TIMEOUT_SECONDS:-30}
+      WEB_DOCUMENT_MAX_RESPONSE_BYTES: ${WEB_DOCUMENT_MAX_RESPONSE_BYTES:-26214400}
+      CRAWLER_MAX_PAGES: ${CRAWLER_MAX_PAGES:-50}
+      CRAWLER_MAX_DEPTH: ${CRAWLER_MAX_DEPTH:-3}
+      CRAWLER_MAX_DURATION_SECONDS: ${CRAWLER_MAX_DURATION_SECONDS:-60}
+      CRAWLER_PAGE_CACHE_SECONDS: ${CRAWLER_PAGE_CACHE_SECONDS:-3600}
+      BROWSER_SERVICE_URL: http://browserd:3001
+      BROWSER_SERVICE_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-internal-token-change-in-production}
       SANDBOX_DOCKER_URL: http://sandboxd:2375
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-python:3.14-alpine}
       SANDBOX_TIMEOUT_SECONDS: ${SANDBOX_TIMEOUT_SECONDS:-10}
@@ -125,9 +189,12 @@ services:
         condition: service_started
       sandboxd:
         condition: service_healthy
+      browserd:
+        condition: service_healthy
     networks:
       - default
       - sandbox_control
+      - browser_control
     healthcheck:
       test: ["CMD", "python", "-c", "import os, urllib.request; h=os.environ['DJANGO_ALLOWED_HOSTS'].split(',')[0]; r=urllib.request.Request('http://127.0.0.1:8000/health', headers={'Host':h, 'X-Forwarded-Proto':'https'}); urllib.request.urlopen(r, timeout=3)"]
       interval: 10s
@@ -146,6 +213,7 @@ services:
     networks:
       - default
       - sandbox_control
+      - browser_control
 
   beat:
     image: agentarium-app:local
@@ -207,3 +275,8 @@ volumes:
 networks:
   sandbox_control:
     internal: true
+  browser_control:
+    internal: true
+  browser_proxy:
+    internal: true
+  browser_egress:

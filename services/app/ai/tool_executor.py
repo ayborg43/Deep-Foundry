@@ -26,7 +26,11 @@ from uuid import UUID
 from django.conf import settings
 from django.core.mail import send_mail
 
+from ai.browser_reader import BrowserReadError, browse_webpage
+from ai.document_reader import DocumentReadError, read_public_document
 from ai.sandbox import SandboxError, run_python
+from ai.structured_extraction import ExtractionError, extract_labeled_values
+from ai.web_crawler import CrawlError, crawl_website, is_blocked_url
 from ai.web_reader import WebPageError, read_webpage
 from ai.web_search import WebSearchError, search_web
 from core.interface import (
@@ -70,20 +74,44 @@ def _resolve_within_workspace(workspace_id: UUID | str, relative_path: str) -> P
     return candidate
 
 
+def _workspace_research_blocklist(workspace_id: UUID | str) -> list[str]:
+    from research.models import ResearchDomainPolicy
+
+    policy = ResearchDomainPolicy.objects.filter(workspace_id=workspace_id).first()
+    return list(policy.blocked_domains) if policy else []
+
+
+def _merged_blocklist(workspace_id: UUID | str, supplied: Any = None) -> list[str]:
+    values = _workspace_research_blocklist(workspace_id)
+    if isinstance(supplied, list):
+        values.extend(str(value) for value in supplied[:100])
+    return list(dict.fromkeys(values))[:100]
+
+
 def _web_search(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
     query = arguments.get("query", "")
     try:
         results = search_web(query, max_results=arguments.get("max_results"))
+        blocked = _workspace_research_blocklist(workspace_id)
+        results = [
+            result
+            for result in results
+            if not is_blocked_url(str(result.get("url", "")), blocked)
+        ]
     except WebSearchError as exc:
         return ToolResult(output={"results": []}, error=str(exc))
     return ToolResult(output={"results": results})
 
 
 def _read_webpage(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    url = str(arguments.get("url", ""))
     try:
+        if is_blocked_url(url, _workspace_research_blocklist(workspace_id)):
+            raise WebPageError("The destination is blocked by the workspace research policy.")
         page = read_webpage(
-            str(arguments.get("url", "")),
+            url,
             max_chars=arguments.get("max_chars"),
+            blocked_domains=_workspace_research_blocklist(workspace_id),
         )
     except WebPageError as exc:
         return ToolResult(
@@ -98,6 +126,68 @@ def _read_webpage(arguments: dict[str, Any], *, workspace_id: UUID | str) -> Too
             error=str(exc),
         )
     return ToolResult(output=page)
+
+
+def _read_document(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    url = str(arguments.get("url", ""))
+    try:
+        if is_blocked_url(url, _workspace_research_blocklist(workspace_id)):
+            raise DocumentReadError(
+                "The destination is blocked by the workspace research policy."
+            )
+        return ToolResult(
+            output=read_public_document(
+                url,
+                blocked_domains=_workspace_research_blocklist(workspace_id),
+            )
+        )
+    except DocumentReadError as exc:
+        return ToolResult(output={"url": "", "text": "", "segments": []}, error=str(exc))
+
+
+def _crawl_website(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    try:
+        result = crawl_website(
+            str(arguments.get("url", "")),
+            controls={
+                "max_pages": arguments.get("max_pages", 10),
+                "max_depth": arguments.get("max_depth", 1),
+                "rate_limit_seconds": arguments.get("rate_limit_seconds", 1),
+                "blocked_domains": _merged_blocklist(
+                    workspace_id, arguments.get("blocked_domains")
+                ),
+            },
+        )
+        return ToolResult(output=result)
+    except CrawlError as exc:
+        return ToolResult(output={"start_url": "", "pages": []}, error=str(exc))
+
+
+def _browse_webpage(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    try:
+        return ToolResult(
+            output=browse_webpage(
+                str(arguments.get("url", "")),
+                blocked_domains=_merged_blocklist(
+                    workspace_id, arguments.get("blocked_domains")
+                ),
+            )
+        )
+    except BrowserReadError as exc:
+        return ToolResult(output={"url": "", "text": "", "links": []}, error=str(exc))
+
+
+def _extract_structured_data(
+    arguments: dict[str, Any], *, workspace_id: UUID | str
+) -> ToolResult:
+    try:
+        data = extract_labeled_values(
+            str(arguments.get("text", "")),
+            arguments.get("schema", {}),
+        )
+        return ToolResult(output={"data": data})
+    except ExtractionError as exc:
+        return ToolResult(output={"data": {}}, error=str(exc))
 
 
 def _read_file(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
@@ -301,6 +391,10 @@ def _workspace_status(arguments: dict[str, Any], *, workspace_id: UUID | str) ->
 _EXECUTORS = {
     "web_search": _web_search,
     "read_webpage": _read_webpage,
+    "read_document": _read_document,
+    "crawl_website": _crawl_website,
+    "browse_webpage": _browse_webpage,
+    "extract_structured_data": _extract_structured_data,
     "read_file": _read_file,
     "write_file": _write_file,
     "execute_code": _execute_code,

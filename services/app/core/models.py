@@ -523,6 +523,9 @@ class Notification(UUIDPrimaryKeyModel):
         TASK_COMPLETED = "task_completed", "Task completed"
         APPROVAL_REQUESTED = "approval_requested", "Approval requested"
         WORKFLOW_FAILED = "workflow_failed", "Workflow failed"
+        RESEARCH_COMPLETED = "research_completed", "Research completed"
+        WEBSITE_CHANGED = "website_changed", "Website changed"
+        MONITOR_FAILED = "monitor_failed", "Website monitor failed"
         MENTION = "mention", "Mention"
         BILLING = "billing", "Billing"
 

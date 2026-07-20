@@ -22,6 +22,7 @@ import {
 
 import { ApprovalPolicyDialog } from "@/components/approval-policy-dialog";
 import { FormattedMessage } from "@/components/formatted-message";
+import { ViewSources, evidenceFromCitations } from "@/components/research/source-panel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -719,7 +720,10 @@ export default function ConversationPage() {
                   <span className="font-medium text-foreground">{coworker.name}</span>
                 </div>
                 {message.content ? (
-                  <FormattedMessage content={message.content} className="max-w-full pl-6" />
+                  <div className="max-w-full pl-6">
+                    <FormattedMessage content={message.content} />
+                    <ViewSources items={evidenceFromCitations(message.citations ?? [])} />
+                  </div>
                 ) : null}
                 <div className="flex flex-col gap-1.5 pl-6">
                   {(message.tool_calls ?? []).map((call) => renderPersistedToolCall(message, call))}

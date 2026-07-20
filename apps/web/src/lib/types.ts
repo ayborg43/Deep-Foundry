@@ -339,6 +339,154 @@ export type ChatMessage = {
   parent_message_id: string | null;
   status: MessageStatus;
   created_at: string;
+  citations?: MessageCitation[];
+};
+
+export type ResearchEvidence = {
+  id: string;
+  ordinal: number;
+  claim: string;
+  passage: string;
+  locator: string;
+  page_number: number | null;
+  relevance: number;
+};
+
+export type ResearchSource = {
+  id: string;
+  source_type: "webpage" | "document" | "browser" | "search";
+  requested_url: string;
+  url: string;
+  canonical_url: string;
+  title: string;
+  publisher: string;
+  published_at: string | null;
+  accessed_at: string;
+  language: string;
+  country: string;
+  content_type: string;
+  checksum: string;
+  metadata: Record<string, unknown>;
+  trust_level: "trusted" | "standard" | "blocked";
+  duplicate_of_id: string | null;
+  evidence: ResearchEvidence[];
+};
+
+export type MessageCitation = {
+  id: string;
+  ordinal: number;
+  claim: string;
+  source_id: string;
+  url: string;
+  canonical_url: string;
+  title: string;
+  publisher: string;
+  published_at: string | null;
+  accessed_at: string;
+  passage: string;
+  locator: string;
+  page_number: number | null;
+  language: string;
+  country: string;
+};
+
+export type ResearchStep = {
+  id: string;
+  sequence: number;
+  stage: string;
+  status: "pending" | "running" | "completed" | "failed";
+  message: string;
+  details: Record<string, unknown>;
+  created_at: string;
+};
+
+export type StructuredExtraction = {
+  id: string;
+  schema: Record<string, unknown>;
+  data: Record<string, unknown>;
+  warnings: string[];
+  created_at: string;
+};
+
+export type ResearchRunStatus =
+  | "queued" | "planning" | "searching" | "reading" | "comparing"
+  | "writing" | "completed" | "failed" | "cancelled";
+
+export type ResearchRun = {
+  id: string;
+  workspace_id: string;
+  created_by_id: string;
+  coworker_id: string | null;
+  coworker_name: string | null;
+  query: string;
+  mode: "deep" | "crawl" | "extraction";
+  status: ResearchRunStatus;
+  current_stage: string;
+  progress: number;
+  controls: Record<string, unknown>;
+  plan: string[];
+  report_markdown: string;
+  weak_evidence: boolean;
+  weak_evidence_reasons: string[];
+  conflicts: { claim: string; sources: number[]; explanation: string }[];
+  error_message: string;
+  cancel_requested: boolean;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  steps: ResearchStep[];
+  sources: ResearchSource[];
+  extraction: StructuredExtraction | null;
+};
+
+export type ResearchRunSummary = Pick<
+  ResearchRun,
+  "id" | "workspace_id" | "coworker_id" | "coworker_name" | "query" | "mode" |
+  "status" | "current_stage" | "progress" | "weak_evidence" | "error_message" |
+  "created_at" | "updated_at" | "completed_at"
+> & { source_count: number };
+
+export type WebsiteSnapshot = {
+  id: string;
+  url: string;
+  title: string;
+  checksum: string;
+  metadata: Record<string, unknown>;
+  captured_at: string;
+};
+
+export type WebsiteMonitorRun = {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  snapshot: WebsiteSnapshot | null;
+  change_detected: boolean;
+  change_summary: string;
+  diff: string;
+  error_message: string;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type WebsiteMonitor = {
+  id: string;
+  workspace_id: string;
+  created_by_id: string;
+  coworker_id: string | null;
+  name: string;
+  url: string;
+  frequency: "daily" | "weekly";
+  enabled: boolean;
+  use_browser: boolean;
+  crawl_pages: number;
+  max_depth: number;
+  controls: Record<string, unknown>;
+  next_run_at: string;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+  latest_run: WebsiteMonitorRun | null;
 };
 
 export type ApprovalRequestStatus = "pending" | "approved" | "denied" | "expired";
@@ -438,13 +586,24 @@ export type BackgroundTask = {
 export type Notification = {
   id: string;
   workspace_id: string;
-  type: "task_completed" | "approval_requested" | "workflow_failed" | "mention" | "billing";
+  type:
+    | "task_completed"
+    | "approval_requested"
+    | "workflow_failed"
+    | "mention"
+    | "billing"
+    | "research_completed"
+    | "website_changed"
+    | "monitor_failed";
   payload: {
     task_id?: string;
     approval_request_id?: string;
     title?: string;
     status?: TaskStatus;
     tool_name?: string;
+    research_run_id?: string;
+    monitor_id?: string;
+    change_summary?: string;
   };
   read_at: string | null;
   created_at: string;
