@@ -48,6 +48,7 @@ from core.models import (
 )
 from core.permissions import get_coworker_for_member, get_workspace_for_member
 from core.v2_services import (
+    attach_installed_skill,
     create_agent_team,
     create_api_token,
     create_workflow,
@@ -562,6 +563,15 @@ class MarketplaceInstallView(APIView):
         if version is None:
             raise ValidationError("No approved version is available.")
         workspace = get_workspace_for_member(request.user, request.data.get("workspace_id"))
+        coworker = None
+        if request.data.get("coworker_id"):
+            coworker = get_coworker_for_member(
+                request.user,
+                request.data["coworker_id"],
+                require_write=True,
+            )
+            if coworker.workspace_id != workspace.id:
+                raise ValidationError("The selected coworker is not in the installation workspace.")
         if listing.pricing_model != MarketplaceListing.PricingModel.FREE:
             from core.models import MarketplaceOrder
 
@@ -577,7 +587,18 @@ class MarketplaceInstallView(APIView):
 
         install_dependencies(version, workspace=workspace, user=request.user)
         install = install_listing(version, workspace=workspace, user=request.user)
-        return Response({"id": str(install.id), "listing_version_id": str(version.id), "permission_manifest": version.manifest.get("declared_tools", [])}, status=201)
+        skill_attachment = None
+        if coworker is not None and listing.listing_type == MarketplaceListing.ListingType.SKILL:
+            if not hasattr(version, "skill"):
+                raise ValidationError("This Marketplace skill has no installable skill version.")
+            skill_attachment = attach_installed_skill(coworker=coworker, skill=version.skill)
+        return Response({
+            "id": str(install.id),
+            "listing_version_id": str(version.id),
+            "permission_manifest": version.manifest.get("declared_tools", []),
+            "coworker_id": str(coworker.id) if coworker else None,
+            "skill_attachment_id": str(skill_attachment.id) if skill_attachment else None,
+        }, status=201)
 
 
 class MarketplaceForkView(APIView):
@@ -635,12 +656,15 @@ class CoworkerSkillAttachView(APIView):
     def post(self, request, coworker_id):
         coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
         skill = get_object_or_404(SkillVersion, id=request.data.get("skill_version_id"))
-        if not MarketplaceInstall.objects.filter(workspace=coworker.workspace, listing_version=skill.listing_version).exists():
-            raise ValidationError("Install this skill before attaching it.")
-        row, created = CoworkerSkillAttachment.objects.update_or_create(
-            coworker=coworker, skill=skill, defaults={"enabled": request.data.get("enabled", True)}
+        existed = CoworkerSkillAttachment.objects.filter(coworker=coworker, skill=skill).exists()
+        row = attach_installed_skill(coworker=coworker, skill=skill)
+        if request.data.get("enabled") is False:
+            row.enabled = False
+            row.save(update_fields=["enabled"])
+        return Response(
+            {"id": str(row.id), "skill_version_id": str(skill.id), "enabled": row.enabled},
+            status=200 if existed else 201,
         )
-        return Response({"id": str(row.id), "skill_version_id": str(skill.id), "enabled": row.enabled}, status=201 if created else 200)
 
     def delete(self, request, coworker_id, skill_id):
         coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)

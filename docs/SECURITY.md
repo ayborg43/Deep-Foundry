@@ -49,6 +49,16 @@ new child container and is force-removed after completion or timeout.
 
 - Every Tool call that executes code or shell commands runs in an ephemeral, isolated container/microVM, provisioned per call — whether triggered synchronously from a live chat request in the application process or asynchronously by a Celery worker running a Task/Workflow step — and destroyed immediately after (`ARCHITECTURE.md` §7).
 - **Default-deny network egress.** A sandbox has zero outbound network access unless the specific Tool's manifest declares a required egress target (e.g., a `web_search` tool is allowlisted to the search provider's API only).
+- Public webpage reading runs in a dedicated bounded HTTP client outside the
+  code sandbox. It accepts only HTTP/HTTPS on standard ports, resolves and pins
+  the destination before connecting, rejects every non-global address, repeats
+  validation for redirects, does not use ambient proxy credentials or cookies,
+  and accepts only size-limited textual responses. These controls prevent a
+  user-supplied URL from becoming an SSRF path into the host, metadata service,
+  Compose network, or another workspace.
+- Webpage text is always treated as untrusted evidence. Coworker system guidance
+  explicitly rejects instructions embedded in search results or page content;
+  normal Tool permission and approval rules still apply to any subsequent action.
 - **Resource limits:** CPU, memory, execution time, and disk are capped per sandbox invocation; a runaway process is killed and reported as a failed Tool call, not left to consume resources indefinitely.
 - **No sandbox-to-sandbox communication** and no access to the host's credentials, other workspaces' data, or the platform's own internal network by default.
 - The controller daemon requires a privileged container on the self-hosted host;

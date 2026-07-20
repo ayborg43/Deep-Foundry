@@ -61,7 +61,7 @@ class ToolCatalogTests(CoworkerTestBase):
         self.assertEqual(
             names,
             {
-                "web_search", "read_file", "write_file", "execute_code",
+                "web_search", "read_webpage", "read_file", "write_file", "execute_code",
                 "send_email", "create_calendar_event", "send_slack_message",
                 "send_discord_message", "create_github_issue", "post_tweet", "send_webhook",
                 "create_presentation", "create_diagram", "record_video_analysis",
@@ -265,7 +265,7 @@ class CoworkerDetailTests(CoworkerTestBase):
         response = self.client.delete(
             reverse("coworker-detail", kwargs={"coworker_id": created["id"]})
         )
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         coworker = Coworker.objects.get(id=created["id"])
         self.assertEqual(coworker.status, Coworker.Status.ARCHIVED)
 

@@ -12,7 +12,8 @@ from rest_framework.test import APIClient
 
 from core.coworkers import create_coworker
 from core.models import (
-    AgentTeam, Integration, MarketplaceListing, OrgPolicyFloor, PermissionProfile,
+    AgentTeam, Integration, MarketplaceListing, MarketplaceListingVersion,
+    OrgPolicyFloor, PermissionProfile,
     WorkflowRun, WorkflowRunStep, WorkflowTrigger, Workspace, WorkspaceMember, User,
 )
 from core.permissions import resolve_tool_permission
@@ -89,6 +90,34 @@ class WorkflowTests(Phase2TestBase):
 
 
 class MarketplaceAndSdkTests(Phase2TestBase):
+    def test_web_researcher_install_assigns_skill_and_declared_tools(self):
+        listing = MarketplaceListing.objects.get(name="Web Researcher")
+        response = self.client.post(
+            f"/api/v1/marketplace/listings/{listing.id}/install",
+            {
+                "workspace_id": str(self.workspace.id),
+                "coworker_id": str(self.worker.id),
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["coworker_id"], str(self.worker.id))
+        self.assertTrue(
+            self.worker.skill_attachments.filter(
+                skill__listing_version__listing=listing,
+                enabled=True,
+            ).exists()
+        )
+        self.assertEqual(
+            set(
+                self.worker.tool_attachments.filter(
+                    tool__name__in=["web_search", "read_webpage"],
+                    enabled=True,
+                ).values_list("tool__name", flat=True)
+            ),
+            {"web_search", "read_webpage"},
+        )
+
     def test_remove_demo_packs_handles_a_backfilled_default_coworker(self):
         demo_user = User.objects.create_user(
             email="marketplace@agentarium.local",
@@ -124,10 +153,56 @@ class MarketplaceAndSdkTests(Phase2TestBase):
         self.assertFalse(Workspace.objects.filter(id=demo_workspace.id).exists())
 
     def test_first_party_pack_install_provisions_team_and_scheduled_workflow(self):
-        listing = MarketplaceListing.objects.get(name="Developer Team")
+        listing = MarketplaceListing.objects.create(
+            publisher_workspace=self.workspace,
+            listing_type="capability_pack",
+            name="Test Delivery Team",
+            summary="A test-only installable pack.",
+        )
+        MarketplaceListingVersion.objects.create(
+            listing=listing,
+            version_string="1.0.0",
+            manifest={
+                "declared_tools": [],
+                "coworkers": [
+                    {
+                        "key": "manager",
+                        "name": "Pack Manager",
+                        "team_role": "manager",
+                        "role_description": "Coordinate delivery.",
+                    },
+                    {
+                        "key": "developer",
+                        "name": "Pack Developer",
+                        "team_role": "developer",
+                        "role_description": "Implement delivery work.",
+                    },
+                ],
+                "agent_team": {
+                    "name": "Test Delivery Team",
+                    "collaboration_pattern": "manager_delegate",
+                },
+                "workflows": [
+                    {
+                        "name": "Weekly delivery",
+                        "schedule_cron": "0 9 * * 1",
+                        "steps": [
+                            {
+                                "type": "coworker_action",
+                                "coworker_ref": "developer",
+                                "title": "Prepare delivery update",
+                            }
+                        ],
+                    }
+                ],
+            },
+            review_status="approved",
+            reviewed_at=timezone.now(),
+            published_at=timezone.now(),
+        )
         response = self.client.post(f"/api/v1/marketplace/listings/{listing.id}/install", {"workspace_id": str(self.workspace.id)}, format="json")
         self.assertEqual(response.status_code, 201)
-        self.assertTrue(self.workspace.agent_teams.filter(name="Developer Team").exists())
+        self.assertTrue(self.workspace.agent_teams.filter(name="Test Delivery Team").exists())
         self.assertTrue(self.workspace.workflows.filter(triggers__trigger_type="scheduled").exists())
 
     def test_scoped_sdk_token_can_publish_safe_skill(self):

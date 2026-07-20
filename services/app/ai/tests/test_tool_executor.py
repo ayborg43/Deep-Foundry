@@ -28,6 +28,27 @@ class ToolExecutorTests(SimpleTestCase):
         self.assertIsNone(result.error)
         search_web.assert_called_once_with("agentarium", max_results=None)
 
+    @patch("ai.tool_executor.read_webpage")
+    def test_read_webpage_returns_extracted_page(self, read_webpage):
+        read_webpage.return_value = {
+            "url": "https://example.com/report",
+            "title": "Report",
+            "text": "Evidence",
+            "headings": [],
+            "links": [],
+        }
+        result = execute_tool(
+            "read_webpage",
+            {"url": "https://example.com/report", "max_chars": 5000},
+            workspace_id=self.workspace_id,
+        )
+        self.assertIsNone(result.error)
+        self.assertEqual(result.output["title"], "Report")
+        read_webpage.assert_called_once_with(
+            "https://example.com/report",
+            max_chars=5000,
+        )
+
     def test_write_then_read_file_round_trips(self):
         write_result = execute_tool(
             "write_file",

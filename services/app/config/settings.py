@@ -182,6 +182,22 @@ WEB_SEARCH_MAX_RESPONSE_BYTES = int(
     os.environ.get("WEB_SEARCH_MAX_RESPONSE_BYTES", str(2 * 1024 * 1024))
 )
 
+# Built-in public webpage reader. User-provided URLs are resolved and pinned to
+# public IPs in ai/web_reader.py; these bounds keep a single model tool call
+# from turning into an unbounded download or prompt payload.
+WEB_READER_TIMEOUT_SECONDS = float(os.environ.get("WEB_READER_TIMEOUT_SECONDS", "10"))
+WEB_READER_MAX_RESPONSE_BYTES = int(
+    os.environ.get("WEB_READER_MAX_RESPONSE_BYTES", str(2 * 1024 * 1024))
+)
+WEB_READER_MAX_TEXT_CHARS = int(os.environ.get("WEB_READER_MAX_TEXT_CHARS", "30000"))
+WEB_READER_MAX_REDIRECTS = int(os.environ.get("WEB_READER_MAX_REDIRECTS", "3"))
+WEB_READER_MAX_LINKS = int(os.environ.get("WEB_READER_MAX_LINKS", "50"))
+WEB_READER_MAX_HEADINGS = int(os.environ.get("WEB_READER_MAX_HEADINGS", "30"))
+WEB_READER_USER_AGENT = os.environ.get(
+    "WEB_READER_USER_AGENT",
+    "Deep-Foundry/1.0 (public webpage reader)",
+)
+
 # Instance-wide DeepSeek Cloud key. When set, it's the default for every
 # workspace that hasn't configured its own ProviderCredential — so a
 # self-hosted operator can supply one key for the whole deployment instead of

@@ -24,6 +24,9 @@ from core.models import (
     AgentTeamRun,
     AgentTeamVersion,
     ApiToken,
+    Coworker,
+    CoworkerSkillAttachment,
+    CoworkerToolAttachment,
     MarketplaceInstall,
     MarketplaceListing,
     MarketplaceListingVersion,
@@ -361,6 +364,31 @@ def install_listing(
         workspace_id=workspace.id, metadata={"version": version.version_string},
     )
     return install
+
+
+def attach_installed_skill(
+    *, coworker: Coworker, skill: SkillVersion
+) -> CoworkerSkillAttachment:
+    """Attach an installed skill and grant its declared catalog tools.
+
+    Existing disabled tool attachments stay disabled; installing a skill must
+    not silently undo a user's explicit revocation.
+    """
+    if not MarketplaceInstall.objects.filter(
+        workspace=coworker.workspace,
+        listing_version=skill.listing_version,
+    ).exists():
+        raise ValidationError("Install this skill before attaching it.")
+    tools = _declared_tool_rows(skill.declared_tools)
+    with transaction.atomic():
+        attachment, _ = CoworkerSkillAttachment.objects.update_or_create(
+            coworker=coworker,
+            skill=skill,
+            defaults={"enabled": True},
+        )
+        for tool in tools:
+            CoworkerToolAttachment.objects.get_or_create(coworker=coworker, tool=tool)
+    return attachment
 
 
 def create_api_token(*, workspace: Workspace, user: User, name: str, scopes: list[str]) -> tuple[ApiToken, str]:

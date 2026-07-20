@@ -44,7 +44,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
             {
                 "name": "Tech Lead",
                 "team_role": AgentTeamMember.Role.MANAGER,
-                "tools": ["web_search", "read_file", "write_file"],
+                "tools": ["web_search", "read_webpage", "read_file", "write_file"],
                 "role_description": (
                     "You are the technical lead. Break objectives into small, "
                     "verifiable engineering tasks, delegate them, and integrate the "
@@ -55,7 +55,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
             {
                 "name": "Developer",
                 "team_role": AgentTeamMember.Role.DEVELOPER,
-                "tools": ["web_search", "read_file", "write_file", "execute_code"],
+                "tools": ["web_search", "read_webpage", "read_file", "write_file", "execute_code"],
                 "role_description": (
                     "You are a pragmatic software developer. Implement exactly what "
                     "the task asks, prefer the simplest working solution, run code "
@@ -65,7 +65,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
             {
                 "name": "Code Reviewer",
                 "team_role": AgentTeamMember.Role.REVIEWER,
-                "tools": ["read_file", "web_search"],
+                "tools": ["read_file", "web_search", "read_webpage"],
                 "role_description": (
                     "You review work for correctness first, then clarity. Point at "
                     "specific lines, explain the failure case each issue causes, and "
@@ -93,7 +93,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
             {
                 "name": "Market Researcher",
                 "team_role": AgentTeamMember.Role.RESEARCHER,
-                "tools": ["web_search", "write_file"],
+                "tools": ["web_search", "read_webpage", "write_file"],
                 "role_description": (
                     "You research markets, audiences, and competitors. Cite where "
                     "each claim comes from, separate facts from interpretation, and "
@@ -103,7 +103,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
             {
                 "name": "Copywriter",
                 "team_role": AgentTeamMember.Role.WRITER,
-                "tools": ["web_search", "read_file", "write_file"],
+                "tools": ["web_search", "read_webpage", "read_file", "write_file"],
                 "role_description": (
                     "You write marketing copy grounded in the research you are "
                     "given. Match the requested tone and channel, lead with the "
@@ -131,7 +131,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
             {
                 "name": "Ops Manager",
                 "team_role": AgentTeamMember.Role.MANAGER,
-                "tools": ["web_search", "read_file", "write_file"],
+                "tools": ["web_search", "read_webpage", "read_file", "write_file"],
                 "role_description": (
                     "You coordinate operational work. Turn fuzzy requests into "
                     "checklists with owners and deadlines, delegate the pieces, and "
@@ -141,7 +141,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
             {
                 "name": "Research Analyst",
                 "team_role": AgentTeamMember.Role.RESEARCHER,
-                "tools": ["web_search", "write_file"],
+                "tools": ["web_search", "read_webpage", "write_file"],
                 "role_description": (
                     "You compare vendors, tools, and options. Build small decision "
                     "tables with criteria that matter, note pricing and risks, and "
@@ -170,7 +170,7 @@ TEMPLATES: dict[str, dict[str, Any]] = {
                 "name": "Assistant",
                 "team_role": AgentTeamMember.Role.CUSTOM,
                 "custom_role_label": "Generalist",
-                "tools": ["web_search", "read_file", "write_file", "execute_code"],
+                "tools": ["web_search", "read_webpage", "read_file", "write_file", "execute_code"],
                 "role_description": (
                     "You are a helpful, general-purpose coworker. You can research, "
                     "draft, summarize, analyze, and use the tools attached to you to "

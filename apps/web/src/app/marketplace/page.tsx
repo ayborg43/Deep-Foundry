@@ -17,10 +17,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { RISK_BADGE_CLASS } from "@/lib/coworkers";
-import type { MarketplaceListing, Tool } from "@/lib/types";
+import type { Coworker, MarketplaceListing, Tool } from "@/lib/types";
 
 const CATEGORIES = ["All", "Support", "Data & ops", "Finance", "Security", "Content"] as const;
 
@@ -36,6 +44,8 @@ export default function MarketplacePage() {
   const router = useRouter();
   const [workspaceId, setWorkspaceId] = useState("");
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
+  const [coworkers, setCoworkers] = useState<Coworker[]>([]);
+  const [selectedCoworkerId, setSelectedCoworkerId] = useState("");
   const [toolRiskByName, setToolRiskByName] = useState<Map<string, Tool["risk_classification"]>>(new Map());
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("All");
@@ -62,6 +72,11 @@ export default function MarketplacePage() {
       try {
         const [id] = await Promise.all([getWorkspaceId(), load()]);
         setWorkspaceId(id || "");
+        if (id) {
+          const rows = await apiFetch<Coworker[]>(`/workspaces/${id}/coworkers`);
+          setCoworkers(rows);
+          setSelectedCoworkerId(rows[0]?.id || "");
+        }
       } catch {
         setError("Couldn’t load the marketplace.");
       }
@@ -80,7 +95,11 @@ export default function MarketplacePage() {
     try {
       await apiFetch(`/marketplace/listings/${listing.id}/install`, {
         method: "POST",
-        body: JSON.stringify({ workspace_id: workspaceId }),
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          coworker_id:
+            listing.listing_type === "skill" ? selectedCoworkerId || undefined : undefined,
+        }),
       });
       setInstalled((current) => new Set(current).add(listing.id));
       setReviewing(null);
@@ -266,6 +285,39 @@ export default function MarketplacePage() {
               </DialogHeader>
 
               <div className="flex flex-col gap-4 text-sm">
+                {reviewing.listing_type === "skill" ? (
+                  <section className="grid gap-1.5">
+                    <Label htmlFor="marketplace-coworker">Assign this skill to</Label>
+                    {coworkers.length > 0 ? (
+                      <>
+                        <Select
+                          value={selectedCoworkerId}
+                          onValueChange={setSelectedCoworkerId}
+                        >
+                          <SelectTrigger id="marketplace-coworker" className="w-full">
+                            <SelectValue placeholder="Choose a coworker" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {coworkers.map((coworker) => (
+                              <SelectItem key={coworker.id} value={coworker.id}>
+                                {coworker.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          The skill and its reviewed tool permissions will be enabled for this
+                          coworker.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+                        Create a coworker before installing this skill.
+                      </p>
+                    )}
+                  </section>
+                ) : null}
+
                 <section>
                   <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <WrenchIcon className="size-3.5" />
@@ -345,7 +397,12 @@ export default function MarketplacePage() {
               <DialogFooter className="items-center gap-2 sm:justify-between">
                 <span className="text-sm font-medium">{priceLabel(reviewing)}</span>
                 <Button
-                  disabled={!workspaceId || busy === reviewing.id || installed.has(reviewing.id)}
+                  disabled={
+                    !workspaceId ||
+                    busy === reviewing.id ||
+                    installed.has(reviewing.id) ||
+                    (reviewing.listing_type === "skill" && !selectedCoworkerId)
+                  }
                   onClick={() =>
                     reviewing.pricing_model === "free" ? install(reviewing) : checkout(reviewing)
                   }

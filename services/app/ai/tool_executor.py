@@ -27,6 +27,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from ai.sandbox import SandboxError, run_python
+from ai.web_reader import WebPageError, read_webpage
 from ai.web_search import WebSearchError, search_web
 from core.interface import (
     OrchestrationError,
@@ -76,6 +77,27 @@ def _web_search(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolR
     except WebSearchError as exc:
         return ToolResult(output={"results": []}, error=str(exc))
     return ToolResult(output={"results": results})
+
+
+def _read_webpage(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    try:
+        page = read_webpage(
+            str(arguments.get("url", "")),
+            max_chars=arguments.get("max_chars"),
+        )
+    except WebPageError as exc:
+        return ToolResult(
+            output={
+                "requested_url": str(arguments.get("url", "")),
+                "url": "",
+                "title": "",
+                "text": "",
+                "headings": [],
+                "links": [],
+            },
+            error=str(exc),
+        )
+    return ToolResult(output=page)
 
 
 def _read_file(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
@@ -278,6 +300,7 @@ def _workspace_status(arguments: dict[str, Any], *, workspace_id: UUID | str) ->
 
 _EXECUTORS = {
     "web_search": _web_search,
+    "read_webpage": _read_webpage,
     "read_file": _read_file,
     "write_file": _write_file,
     "execute_code": _execute_code,

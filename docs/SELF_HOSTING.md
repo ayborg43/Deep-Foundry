@@ -138,6 +138,9 @@ container updates promptly, and never expose MinIO's console publicly.
   Python expression and confirm its stdout is shown.
 - Attach `web_search` and confirm a query returns titled source links rather than an
   empty placeholder result.
+- Attach `read_webpage`, read a public HTML page, and confirm it returns the final
+  URL, title, headings, links, and bounded readable text. Confirm a loopback or
+  private-network URL is rejected.
 - Approve or deny from both inline Chat and the Approval Inbox using only a keyboard.
 - Confirm the event appears in Audit and the model call appears in Usage.
 - Restart the stack and confirm all persistent data remains.
