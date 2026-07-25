@@ -7,6 +7,7 @@ per IMPLEMENTATION_PLAN.md Milestone 3 Epic 3.1.
 
 from __future__ import annotations
 
+from core.billing import enforce_coworker_limit
 from core.models import Coworker, CoworkerVersion, PermissionProfile, User, Workspace
 
 DEFAULT_PERMISSION_PROFILE_NAME = "Default"
@@ -35,6 +36,7 @@ def create_coworker(
     resolved_owner_id = owner_id or (owner.id if owner else None)
     if owner_type not in Coworker.OwnerType.values or resolved_owner_id is None:
         raise ValueError("A valid coworker owner type and owner id are required.")
+    enforce_coworker_limit(workspace)
     coworker = Coworker.objects.create(
         workspace=workspace,
         owner_type=owner_type,

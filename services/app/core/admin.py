@@ -8,6 +8,8 @@ from core.models import (
     Coworker,
     OAuthIdentity,
     ProviderCredential,
+    Subscription,
+    SubscriptionPlan,
     Task,
     User,
     Workflow,
@@ -40,6 +42,21 @@ class WorkspaceAdmin(admin.ModelAdmin):
     list_filter = ["type", "plan_tier"]
     search_fields = ["name", "owner__email"]
     raw_id_fields = ["owner"]
+
+
+@admin.register(SubscriptionPlan)
+class SubscriptionPlanAdmin(admin.ModelAdmin):
+    list_display = ["name", "key", "price_usd", "max_coworkers", "max_agent_teams", "max_tasks_per_month", "max_seats", "is_default", "active"]
+    list_filter = ["active", "is_default"]
+    search_fields = ["key", "name"]
+    ordering = ["sort_order", "price_usd"]
+
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+    list_display = ["workspace", "plan", "status", "seats", "renews_at"]
+    list_filter = ["status", "plan"]
+    raw_id_fields = ["workspace"]
 
 
 @admin.register(WorkspaceMember)

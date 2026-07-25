@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 from django.db import transaction
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai.models import Conversation, ConversationParticipant, Message
+from core.billing import enforce_monthly_task_limit
 from core.interface import decide_approval_request, write_audit_log
 from core.models import ApprovalRequest, Coworker, Notification, Task
 from core.permissions import get_coworker_for_member, get_workspace_for_member
@@ -21,16 +23,25 @@ from worker.tasks import execute_background_task
 
 class TaskSerializer(serializers.ModelSerializer):
     coworker_name = serializers.CharField(source="coworker.name", read_only=True)
+    pending_question = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             "id", "workspace_id", "project_id", "coworker_id", "coworker_name",
             "created_by_type", "created_by_id", "title", "description", "status",
-            "due_at", "parent_task_id", "result", "error_message", "created_at",
-            "updated_at", "completed_at",
+            "due_at", "parent_task_id", "result", "error_message", "pending_question",
+            "created_at", "updated_at", "completed_at",
         ]
         read_only_fields = fields
+
+    def get_pending_question(self, task: Task) -> str | None:
+        """The clarifying question a coworker is waiting on, surfaced only while
+        the task is paused for input. Everything else about execution_state
+        stays server-side."""
+        if task.status != Task.Status.NEEDS_INPUT:
+            return None
+        return (task.execution_state or {}).get("pending_question", {}).get("question")
 
 
 class TaskCreateSerializer(serializers.Serializer):
@@ -47,6 +58,7 @@ def _create_task(request: Request, data: dict) -> Task:
     coworker = get_coworker_for_member(request.user, data["coworker_id"])
     if coworker.workspace_id != workspace.id or coworker.status != Coworker.Status.ACTIVE:
         raise ValidationError("The assignee must be an active coworker in this workspace.")
+    enforce_monthly_task_limit(workspace)
     with transaction.atomic():
         task = Task.objects.create(
             workspace=workspace, coworker=coworker,
@@ -79,9 +91,14 @@ class TaskListCreateView(APIView):
         return Response(TaskSerializer(queryset, many=True).data)
 
     def post(self, request: Request) -> Response:
+        from core.billing import PlanLimitExceeded, plan_limit_response
+
         serializer = TaskCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        task = _create_task(request, serializer.validated_data)
+        try:
+            task = _create_task(request, serializer.validated_data)
+        except PlanLimitExceeded as exc:
+            return plan_limit_response(exc)
         return Response(TaskSerializer(task).data, status=status.HTTP_202_ACCEPTED)
 
 
@@ -137,6 +154,61 @@ class TaskApproveView(TaskDecisionView):
 
 class TaskDenyView(TaskDecisionView):
     approve = False
+
+
+class TaskRespondSerializer(serializers.Serializer):
+    content = serializers.CharField(allow_blank=False, trim_whitespace=True)
+
+
+class TaskRespondView(APIView):
+    """POST /tasks/{id}/respond — answer a coworker's clarifying question and
+    resume the task. The answer is fed back as the ask_user tool's result, so
+    the coworker continues exactly where it paused."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, task_id: str) -> Response:
+        task = get_object_or_404(Task, id=task_id)
+        get_workspace_for_member(request.user, task.workspace_id)
+        if task.status != Task.Status.NEEDS_INPUT:
+            raise ValidationError("This task isn't waiting for your input.")
+        pending = (task.execution_state or {}).get("pending_question")
+        if not pending or not pending.get("tool_call_id"):
+            raise ValidationError("This task has no pending question to answer.")
+
+        serializer = TaskRespondSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        answer = serializer.validated_data["content"]
+
+        messages = list(task.execution_state.get("messages", []))
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": pending["tool_call_id"],
+                "content": json.dumps({"answer": answer}),
+                "tool_calls": [],
+            }
+        )
+        new_state = {**task.execution_state, "messages": messages}
+        new_state.pop("pending_question", None)
+
+        with transaction.atomic():
+            # Back to PENDING so claim_task_execution picks the resume up; the
+            # answer is already in execution_state, so the engine continues past
+            # the ask_user call on its next iteration.
+            Task.objects.filter(id=task.id).update(
+                status=Task.Status.PENDING,
+                execution_state=new_state,
+                updated_at=timezone.now(),
+            )
+            write_audit_log(
+                actor_type="user", actor_id=request.user.id, action="task.input_provided",
+                resource_type="task", resource_id=task.id, workspace_id=task.workspace_id,
+                metadata={"tool_call_id": pending["tool_call_id"]},
+            )
+            transaction.on_commit(lambda: execute_background_task.delay(str(task.id)))
+
+        return Response(TaskSerializer(Task.objects.get(id=task.id)).data)
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -214,13 +286,16 @@ class CoworkerStatusListView(APIView):
         # attention (blocked/failed recently), and last completed.
         active_by_coworker: dict = {}
         attention_by_coworker: dict = {}
+        awaiting_input_by_coworker: dict = {}
         last_completed_by_coworker: dict = {}
         recent_tasks = Task.objects.filter(
             workspace=workspace, coworker_id__in=coworker_ids
         ).order_by("-updated_at")[:300]
         for task in recent_tasks:
             key = task.coworker_id
-            if task.status in (Task.Status.PENDING, Task.Status.IN_PROGRESS):
+            if task.status == Task.Status.NEEDS_INPUT:
+                awaiting_input_by_coworker.setdefault(key, task)
+            elif task.status in (Task.Status.PENDING, Task.Status.IN_PROGRESS):
                 active_by_coworker.setdefault(key, task)
             elif (
                 task.status in (Task.Status.BLOCKED, Task.Status.FAILED)
@@ -248,9 +323,20 @@ class CoworkerStatusListView(APIView):
             attention = attention_by_coworker.get(coworker_id)
             completed = last_completed_by_coworker.get(coworker_id)
 
+            awaiting = awaiting_input_by_coworker.get(coworker_id)
+
             if coworker_id in pending_approval_by_coworker:
                 state = "needs_approval"
                 detail = pending_approval_by_coworker[coworker_id]
+            elif awaiting is not None:
+                # A coworker paused on ask_user is waiting on you, same as a
+                # pending approval — reuse that state so the roster shows amber
+                # "waiting on you" rather than a misleading idle dot.
+                state = "needs_approval"
+                question = (awaiting.execution_state or {}).get("pending_question", {}).get(
+                    "question"
+                )
+                detail = question or awaiting.title
             elif attention is not None:
                 state = "blocked" if attention.status == Task.Status.BLOCKED else "error"
                 detail = attention.error_message or attention.title

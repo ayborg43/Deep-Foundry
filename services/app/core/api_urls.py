@@ -65,6 +65,7 @@ from core.task_views import (
     TaskDenyView,
     TaskDetailView,
     TaskListCreateView,
+    TaskRespondView,
 )
 from core.telegram_views import (
     TelegramConnectionView,
@@ -325,6 +326,7 @@ urlpatterns = [
     path("tasks/<uuid:task_id>", TaskDetailView.as_view(), name="task-detail"),
     path("tasks/<uuid:task_id>/approve", TaskApproveView.as_view(), name="task-approve"),
     path("tasks/<uuid:task_id>/deny", TaskDenyView.as_view(), name="task-deny"),
+    path("tasks/<uuid:task_id>/respond", TaskRespondView.as_view(), name="task-respond"),
     path(
         "conversations/<uuid:conversation_id>/tasks",
         ConversationTaskHandoffView.as_view(),

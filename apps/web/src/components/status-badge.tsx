@@ -16,6 +16,10 @@ const STATUS: Record<TaskStatus, { label: string; className: string; dot?: boole
     label: "Needs approval",
     className: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
   },
+  needs_input: {
+    label: "Needs input",
+    className: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  },
   blocked: {
     label: "Blocked",
     className: "bg-destructive/12 text-destructive",

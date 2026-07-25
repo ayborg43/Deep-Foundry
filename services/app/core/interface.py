@@ -583,7 +583,7 @@ def get_workspace_overview(*, workspace_id: UUID | str) -> dict[str, Any]:
     for team in AgentTeam.objects.filter(workspace_id=workspace_id).select_related(
         "current_version"
     ):
-        latest = team.runs.order_by("-started_at").first()
+        latest = team.runs.order_by("-created_at").first()
         teams.append({
             "id": str(team.id),
             "name": team.name,
@@ -716,6 +716,9 @@ def orchestrate_create_task(
     description = str(description or "").strip()
     if not title or not description:
         raise OrchestrationError("create_task requires a title and a description.")
+    from core.billing import enforce_monthly_task_limit
+
+    enforce_monthly_task_limit(workspace)
     with transaction.atomic():
         task = Task.objects.create(
             workspace=workspace, coworker=assignee,

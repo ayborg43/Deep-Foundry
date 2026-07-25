@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangleIcon, PlusIcon, MicIcon, ArrowUpIcon, BellIcon, ChevronRightIcon, InboxIcon, Wand2Icon } from "lucide-react";
+import { AlertTriangleIcon, PlusIcon, MicIcon, ArrowUpIcon, BellIcon, ChevronRightIcon, ClockIcon, InboxIcon, Wand2Icon } from "lucide-react";
 
 import { ApprovalPolicyDialog } from "@/components/approval-policy-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -83,7 +83,6 @@ export default function HomePage() {
   const [coworkers, setCoworkers] = useState<Coworker[]>([]);
   const [teams, setTeams] = useState<AgentTeam[]>([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"chat" | "cowork">("cowork");
   const [busy, setBusy] = useState(false);
   const [busyNote, setBusyNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +155,7 @@ export default function HomePage() {
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }
 
-  async function submit(text: string) {
+  async function submit(text: string, background: boolean) {
     const content = text.trim();
     if (!content || busy || !workspaceId) return;
     setBusy(true);
@@ -193,7 +192,7 @@ export default function HomePage() {
         }
       }
 
-      if (mode === "cowork") {
+      if (background) {
         // With a team in the workspace, the objective goes to the team;
         // solo workspaces hand off a single background task as before.
         const team = rosterTeams[0];
@@ -259,7 +258,7 @@ export default function HomePage() {
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void submit(input);
+      void submit(input, false);
     }
   }
 
@@ -341,22 +340,17 @@ export default function HomePage() {
             <Button type="button" size="icon-sm" variant="ghost" aria-label="Attach" className="rounded-full">
               <PlusIcon />
             </Button>
-            <div className="flex items-center rounded-full bg-secondary p-0.5 text-sm">
-              <button
-                type="button"
-                onClick={() => setMode("chat")}
-                className={`rounded-full px-3 py-1 transition-colors ${mode === "chat" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Chat
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("cowork")}
-                className={`rounded-full px-3 py-1 transition-colors ${mode === "cowork" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Cowork
-              </button>
-            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="rounded-full text-muted-foreground"
+              disabled={busy || !input.trim()}
+              onClick={() => void submit(input, true)}
+            >
+              <ClockIcon data-icon="inline-start" />
+              Run in background
+            </Button>
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-muted-foreground sm:inline">DeepSeek</span>
@@ -368,7 +362,7 @@ export default function HomePage() {
               size="icon-sm"
               className="rounded-full"
               disabled={busy || !input.trim()}
-              onClick={() => void submit(input)}
+              onClick={() => void submit(input, false)}
               aria-label="Send"
             >
               <ArrowUpIcon />
@@ -380,11 +374,7 @@ export default function HomePage() {
       <p className="mt-2 px-1 text-xs text-muted-foreground">
         {coworkers.length === 0
           ? "No coworkers yet — describe what you need and your team is designed, hired, and put to work automatically."
-          : mode === "cowork"
-            ? teams.length > 0
-              ? `Runs in the background — your objective goes to ${teams[0].name}. Risky actions still ask you first.`
-              : "Runs in the background. Risky actions still ask you first."
-            : "A live conversation with your coworker. Ask what your teams are doing, or have them take on new work."}
+          : "Press Enter to start a conversation. Use “Run in background” to hand off a task that runs on its own — risky actions still ask you first."}
       </p>
 
       {busy && busyNote ? (

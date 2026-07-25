@@ -90,6 +90,18 @@ class TaskApiTests(TaskTestBase):
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(listing.data[0]["coworker_name"], "Aria")
 
+    def test_workspace_list_exposes_my_role(self):
+        response = self.client.get("/api/v1/workspaces")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]["my_role"], "owner")
+
+    def test_respond_rejected_when_task_not_awaiting_input(self):
+        task = self.create_task()  # status pending, no pending question
+        response = self.client.post(
+            f"/api/v1/tasks/{task.id}/respond", {"content": "hello"}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+
 
 class TaskEngineTests(TaskTestBase):
     @patch("worker.tasks.dispatch_notification_email.delay")
@@ -159,6 +171,81 @@ class TaskEngineTests(TaskTestBase):
         task.refresh_from_db()
         self.assertEqual(task.status, Task.Status.COMPLETED)
         self.assertEqual(task.result, "Task finished safely.")
+
+    @patch("core.task_views.execute_background_task.delay")
+    @patch("worker.tasks.dispatch_notification_email.delay")
+    @patch.object(DeepSeekCloudAdapter, "_post")
+    def test_ask_user_pauses_for_input_then_resumes_with_answer(
+        self, post, _email_delay, resume_delay
+    ):
+        post.side_effect = [
+            {
+                "model": "deepseek-v4-flash",
+                "choices": [{
+                    "message": {
+                        "content": "Which quarter should I use?",
+                        "tool_calls": [{
+                            "id": "call_ask_1",
+                            "type": "function",
+                            "function": {
+                                "name": "ask_user",
+                                "arguments": '{"question":"Calendar Q3 or fiscal Q3?"}',
+                            },
+                        }],
+                    },
+                    "finish_reason": "tool_calls",
+                }],
+                "usage": {"prompt_tokens": 8, "completion_tokens": 3},
+            },
+            {
+                "model": "deepseek-v4-flash",
+                "choices": [{
+                    "message": {"content": "Done using calendar Q3."},
+                    "finish_reason": "stop",
+                }],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 4},
+            },
+        ]
+        task = self.create_task()
+
+        # ask_user is built-in — no tool needs attaching for it to be callable.
+        execute_background_task(task.id)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.NEEDS_INPUT)
+        self.assertEqual(
+            task.execution_state["pending_question"]["question"],
+            "Calendar Q3 or fiscal Q3?",
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.user, type=Notification.Type.INPUT_REQUESTED
+            ).exists()
+        )
+
+        # The detail endpoint surfaces the question only while awaiting input.
+        detail = self.client.get(f"/api/v1/tasks/{task.id}")
+        self.assertEqual(detail.data["pending_question"], "Calendar Q3 or fiscal Q3?")
+
+        # Answering resumes the task and stores the reply as the tool result.
+        with self.captureOnCommitCallbacks(execute=True):
+            respond = self.client.post(
+                f"/api/v1/tasks/{task.id}/respond",
+                {"content": "Use calendar Q3."},
+                format="json",
+            )
+        self.assertEqual(respond.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.PENDING)
+        self.assertNotIn("pending_question", task.execution_state)
+        resume_delay.assert_called_once_with(str(task.id))
+        tool_messages = [m for m in task.execution_state["messages"] if m["role"] == "tool"]
+        self.assertTrue(any("Use calendar Q3." in m["content"] for m in tool_messages))
+
+        # Resume: the coworker continues with the answer and finishes.
+        execute_background_task(task.id)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.COMPLETED)
+        self.assertEqual(task.result, "Done using calendar Q3.")
 
 
 class CoworkerStatusTests(TaskTestBase):

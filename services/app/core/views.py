@@ -553,16 +553,21 @@ class CoworkerListCreateView(APIView):
             elif not Team.objects.filter(id=owner_id, workspace=workspace).exists():
                 raise ValidationError({"owner_id": "Team not found in this workspace."})
 
-        coworker = coworker_service.create_coworker(
-            workspace=workspace,
-            owner_type=owner_type,
-            owner_id=owner_id,
-            created_by=request.user,
-            name=data["name"],
-            role_description=data["role_description"],
-            model_binding=data["model_binding"],
-            avatar_url=data.get("avatar_url"),
-        )
+        from core.billing import PlanLimitExceeded, plan_limit_response
+
+        try:
+            coworker = coworker_service.create_coworker(
+                workspace=workspace,
+                owner_type=owner_type,
+                owner_id=owner_id,
+                created_by=request.user,
+                name=data["name"],
+                role_description=data["role_description"],
+                model_binding=data["model_binding"],
+                avatar_url=data.get("avatar_url"),
+            )
+        except PlanLimitExceeded as exc:
+            return plan_limit_response(exc)
         write_audit_log(
             actor_type="user", actor_id=request.user.id, action="coworker.create",
             resource_type="coworker", resource_id=coworker.id, workspace_id=workspace.id,

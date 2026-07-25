@@ -375,10 +375,12 @@ def _orchestration_executor(fn, required: tuple[str, ...]):
     def execute(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
         from rest_framework.exceptions import PermissionDenied, ValidationError
 
+        from core.billing import PlanLimitExceeded
+
         kwargs = {key: arguments.get(key) for key in required}
         try:
             return ToolResult(output=fn(workspace_id=workspace_id, **kwargs))
-        except (OrchestrationError, ValidationError, PermissionDenied) as exc:
+        except (OrchestrationError, ValidationError, PermissionDenied, PlanLimitExceeded) as exc:
             raise ToolExecutionError(str(exc)) from exc
 
     return execute

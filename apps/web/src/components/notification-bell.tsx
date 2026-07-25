@@ -56,12 +56,15 @@ export function NotificationBell() {
           ) : (
             items.slice(0, 8).map((item) => {
               const href =
+                item.type === "input_requested" && item.payload.task_id ? `/tasks/${item.payload.task_id}` :
                 item.type === "approval_requested" ? "/approvals" :
                 item.type === "research_completed" && item.payload.research_run_id ? `/research/${item.payload.research_run_id}` :
                 (item.type === "website_changed" || item.type === "monitor_failed") && item.payload.monitor_id ? `/research/monitors/${item.payload.monitor_id}` :
                 item.payload.task_id ? `/tasks/${item.payload.task_id}` : "/home";
               const detail =
-                item.type === "approval_requested"
+                item.type === "input_requested"
+                  ? item.payload.question ?? "A coworker needs your input to continue"
+                  : item.type === "approval_requested"
                   ? `Approval needed for ${item.payload.tool_name ?? "a tool"}`
                   : item.type === "research_completed"
                     ? "Research report is ready"

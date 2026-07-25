@@ -21,6 +21,21 @@ type ApiErrorBody = {
   };
 };
 
+// Most endpoints return the {error:{code,message}} envelope, but a handful
+// of views still let a raw DRF ValidationError bubble up — a bare
+// {field: ["message"]} dict. Rather than every one of those looking like a
+// generic "Something went wrong", flatten it into one readable line.
+function flattenFieldErrors(body: unknown): string | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const entries = Object.entries(body as Record<string, unknown>);
+  if (entries.length === 0) return null;
+  const parts = entries.map(([field, messages]) => {
+    const text = Array.isArray(messages) ? messages.join(" ") : String(messages);
+    return field === "non_field_errors" || field === "detail" ? text : `${field}: ${text}`;
+  });
+  return parts.join(" ") || null;
+}
+
 export class ApiRequestError extends Error {
   status: number;
   code: string;
@@ -156,7 +171,7 @@ export async function apiFetch<T = unknown>(
     throw new ApiRequestError(
       res.status,
       body.error?.code ?? "unknown_error",
-      body.error?.message ?? "Something went wrong. Please try again.",
+      body.error?.message ?? flattenFieldErrors(data) ?? "Something went wrong. Please try again.",
       body.error?.details
     );
   }

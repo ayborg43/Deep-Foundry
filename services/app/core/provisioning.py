@@ -10,7 +10,7 @@ a team via ai.team_designer + core.starter_teams.
 
 from django.db import transaction
 
-from core.models import User, Workspace, WorkspaceMember
+from core.models import Subscription, User, Workspace, WorkspaceMember
 
 # Sensible default model; matches the task engine's own fallback.
 DEFAULT_MODEL_BINDING = {"primary": "deepseek-v4-flash"}
@@ -18,6 +18,8 @@ DEFAULT_MODEL_BINDING = {"primary": "deepseek-v4-flash"}
 
 @transaction.atomic
 def provision_personal_workspace(user: User) -> Workspace:
+    from core.billing import default_plan
+
     workspace = Workspace.objects.create(
         name=f"{user.display_name or user.email}'s Workspace",
         type=Workspace.WorkspaceType.PERSONAL,
@@ -26,4 +28,5 @@ def provision_personal_workspace(user: User) -> Workspace:
     WorkspaceMember.objects.create(
         workspace=workspace, user=user, role=WorkspaceMember.Role.OWNER
     )
+    Subscription.objects.create(workspace=workspace, plan=default_plan())
     return workspace

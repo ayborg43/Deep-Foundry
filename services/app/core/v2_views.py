@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import uuid
 from datetime import datetime
 
 from croniter import croniter
@@ -36,6 +37,7 @@ from core.models import (
     ProjectResource,
     SkillVersion,
     Subscription,
+    SubscriptionPlan,
     Team,
     TeamMember,
     Workflow,
@@ -178,6 +180,8 @@ class OrganizationListCreateView(APIView):
         return Response([{"id": str(row.id), "name": row.name, "plan_tier": row.plan_tier} for row in rows])
 
     def post(self, request: Request) -> Response:
+        from core.billing import default_plan
+
         name = str(request.data.get("name", "")).strip()
         if not name:
             raise ValidationError({"name": "Name is required."})
@@ -192,7 +196,9 @@ class OrganizationListCreateView(APIView):
             WorkspaceMember.objects.create(
                 workspace=workspace, user=request.user, role=WorkspaceMember.Role.OWNER
             )
-            Subscription.objects.create(workspace=workspace, plan_tier=workspace.plan_tier)
+            # plan_tier above is the self-hosted/cloud deployment marker;
+            # billing/limits always start on the catalog's default plan.
+            Subscription.objects.create(workspace=workspace, plan=default_plan())
         return Response({"id": str(workspace.id), "name": workspace.name}, status=201)
 
 
@@ -208,6 +214,8 @@ class WorkspaceMemberListCreateView(APIView):
         ])
 
     def post(self, request: Request, workspace_id: str) -> Response:
+        from core.billing import PlanLimitExceeded, enforce_seat_limit, plan_limit_response
+
         workspace = _workspace_for_write(request.user, workspace_id)
         email = User.objects.normalize_email(request.data.get("email", ""))
         role = request.data.get("role", WorkspaceMember.Role.MEMBER)
@@ -221,6 +229,14 @@ class WorkspaceMemberListCreateView(APIView):
         if created_user:
             user.set_unusable_password()
             user.save(update_fields=["password"])
+        # Only a genuinely new membership counts toward the seat limit —
+        # re-inviting or changing an existing member's role doesn't add a seat.
+        is_new_member = not WorkspaceMember.objects.filter(workspace=workspace, user=user).exists()
+        if is_new_member:
+            try:
+                enforce_seat_limit(workspace)
+            except PlanLimitExceeded as exc:
+                return plan_limit_response(exc)
         member, created = WorkspaceMember.objects.update_or_create(
             workspace=workspace, user=user,
             defaults={"role": role, "invited_by": request.user},
@@ -303,8 +319,13 @@ class AgentTeamListCreateView(APIView):
         return Response([_team_data(row) for row in rows])
 
     def post(self, request: Request) -> Response:
+        from core.billing import PlanLimitExceeded, plan_limit_response
+
         workspace = get_workspace_for_member(request.user, request.data.get("workspace_id"))
-        team = create_agent_team(workspace=workspace, user=request.user, payload=request.data)
+        try:
+            team = create_agent_team(workspace=workspace, user=request.user, payload=request.data)
+        except PlanLimitExceeded as exc:
+            return plan_limit_response(exc)
         return Response(_team_data(team), status=201)
 
 
@@ -335,8 +356,15 @@ class AgentTeamRunView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, team_id):
+        from core.billing import PlanLimitExceeded, plan_limit_response
+
         team = get_object_or_404(AgentTeam, id=team_id)
-        run = start_agent_team_run(team, user=request.user, objective=request.data.get("objective", ""))
+        try:
+            run = start_agent_team_run(
+                team, user=request.user, objective=request.data.get("objective", "")
+            )
+        except PlanLimitExceeded as exc:
+            return plan_limit_response(exc)
         return Response({"id": str(run.id), "status": run.status, "objective": run.objective}, status=202)
 
 
@@ -748,26 +776,58 @@ class ApiTokenRevokeView(APIView):
         return Response(status=204)
 
 
+def _plan_data(plan: SubscriptionPlan) -> dict:
+    return {
+        "id": str(plan.id), "key": plan.key, "name": plan.name,
+        "description": plan.description, "price_usd": str(plan.price_usd),
+        "max_coworkers": plan.max_coworkers, "max_agent_teams": plan.max_agent_teams,
+        "max_tasks_per_month": plan.max_tasks_per_month, "max_seats": plan.max_seats,
+        "is_default": plan.is_default, "active": plan.active,
+    }
+
+
 class SubscriptionView(APIView):
+    """GET/PATCH /workspaces/{id}/subscription — the workspace's own plan
+    and usage. Switching plans here is self-serve (any active plan, no
+    payment gate), matching this endpoint's pre-existing behavior; editing
+    the plan catalog itself is admin-only (core.billing_views)."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, workspace_id):
+        from core.billing import get_active_plan, get_usage
+
         workspace = get_workspace_for_member(request.user, workspace_id)
-        subscription, _ = Subscription.objects.get_or_create(workspace=workspace, defaults={"plan_tier": workspace.plan_tier})
-        return Response({"plan_tier": subscription.plan_tier, "status": subscription.status, "seats": subscription.seats, "renews_at": subscription.renews_at})
+        plan = get_active_plan(workspace)
+        subscription = workspace.subscription
+        return Response({
+            "plan": _plan_data(plan) if plan else None,
+            "status": subscription.status,
+            "seats": subscription.seats,
+            "renews_at": subscription.renews_at,
+            "usage": get_usage(workspace),
+        })
 
     def patch(self, request, workspace_id):
         workspace = _workspace_for_write(request.user, workspace_id)
-        tier = request.data.get("plan_tier")
-        if tier not in Workspace.PlanTier.values:
-            raise ValidationError({"plan_tier": "Invalid plan."})
+        plan_key = str(request.data.get("plan_key") or request.data.get("plan_id") or "").strip()
+        if not plan_key:
+            raise ValidationError({"plan_key": "A plan key or id is required."})
+        plan = SubscriptionPlan.objects.filter(key=plan_key, active=True).first()
+        if plan is None:
+            try:
+                uuid.UUID(plan_key)
+            except ValueError:
+                pass
+            else:
+                plan = SubscriptionPlan.objects.filter(id=plan_key, active=True).first()
+        if plan is None:
+            raise ValidationError({"plan_key": "Unknown or inactive plan."})
         subscription, _ = Subscription.objects.update_or_create(
             workspace=workspace,
-            defaults={"plan_tier": tier, "seats": request.data.get("seats"), "status": Subscription.Status.ACTIVE},
+            defaults={"plan": plan, "seats": request.data.get("seats"), "status": Subscription.Status.ACTIVE},
         )
-        workspace.plan_tier = tier
-        workspace.save(update_fields=["plan_tier"])
-        return Response({"plan_tier": subscription.plan_tier, "status": subscription.status})
+        return Response({"plan": _plan_data(plan), "status": subscription.status})
 
 
 # --- Starter teams (templates + AI-designed) -------------------------------
@@ -790,24 +850,28 @@ class ProvisionTeamView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, workspace_id: str) -> Response:
+        from core.billing import PlanLimitExceeded, plan_limit_response
         from core.starter_teams import provision_team, provision_template
 
         workspace = get_workspace_for_member(request.user, workspace_id)
         template_key = request.data.get("template")
-        if template_key:
-            result = provision_template(
-                workspace=workspace, created_by=request.user, template_key=str(template_key)
-            )
-        else:
-            result = provision_team(
-                workspace=workspace,
-                created_by=request.user,
-                spec={
-                    "team_name": request.data.get("team_name", ""),
-                    "collaboration_pattern": request.data.get("collaboration_pattern", ""),
-                    "coworkers": request.data.get("coworkers") or [],
-                },
-            )
+        try:
+            if template_key:
+                result = provision_template(
+                    workspace=workspace, created_by=request.user, template_key=str(template_key)
+                )
+            else:
+                result = provision_team(
+                    workspace=workspace,
+                    created_by=request.user,
+                    spec={
+                        "team_name": request.data.get("team_name", ""),
+                        "collaboration_pattern": request.data.get("collaboration_pattern", ""),
+                        "coworkers": request.data.get("coworkers") or [],
+                    },
+                )
+        except PlanLimitExceeded as exc:
+            return plan_limit_response(exc)
         write_audit_log(
             actor_type="user", actor_id=request.user.id, action="starter_team.provision",
             resource_type="workspace", resource_id=workspace.id, workspace_id=workspace.id,

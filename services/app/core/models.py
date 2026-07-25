@@ -483,6 +483,7 @@ class Task(UUIDPrimaryKeyModel):
         PENDING = "pending", "Pending"
         IN_PROGRESS = "in_progress", "In progress"
         NEEDS_APPROVAL = "needs_approval", "Needs approval"
+        NEEDS_INPUT = "needs_input", "Needs input"
         BLOCKED = "blocked", "Blocked"
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
@@ -522,6 +523,7 @@ class Notification(UUIDPrimaryKeyModel):
     class Type(models.TextChoices):
         TASK_COMPLETED = "task_completed", "Task completed"
         APPROVAL_REQUESTED = "approval_requested", "Approval requested"
+        INPUT_REQUESTED = "input_requested", "Input requested"
         WORKFLOW_FAILED = "workflow_failed", "Workflow failed"
         RESEARCH_COMPLETED = "research_completed", "Research completed"
         WEBSITE_CHANGED = "website_changed", "Website changed"
@@ -1059,6 +1061,42 @@ class ApiToken(UUIDPrimaryKeyModel):
         db_table = "api_tokens"
 
 
+class SubscriptionPlan(UUIDPrimaryKeyModel):
+    """The admin-editable plan catalog (platform staff only — see
+    core.billing_views). A workspace's Subscription points at one of these;
+    core.billing reads its limit fields to gate coworker/team/task/seat
+    creation. A null limit means unlimited."""
+
+    key = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.CharField(max_length=255, blank=True)
+    price_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_coworkers = models.PositiveIntegerField(null=True, blank=True)
+    max_agent_teams = models.PositiveIntegerField(null=True, blank=True)
+    max_tasks_per_month = models.PositiveIntegerField(null=True, blank=True)
+    max_seats = models.PositiveIntegerField(null=True, blank=True)
+    # The plan new workspaces are subscribed to automatically. Enforced as a
+    # single row via save() below — same "invariant enforced in save()"
+    # pattern as PermissionProfile's risk-policy default elsewhere here.
+    is_default = models.BooleanField(default=False)
+    active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "subscription_plans"
+        ordering = ["sort_order", "price_usd"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            type(self).objects.exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
 class Subscription(UUIDPrimaryKeyModel):
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
@@ -1066,7 +1104,7 @@ class Subscription(UUIDPrimaryKeyModel):
         CANCELLED = "cancelled", "Cancelled"
 
     workspace = models.OneToOneField(Workspace, on_delete=models.CASCADE, related_name="subscription")
-    plan_tier = models.CharField(max_length=20, choices=Workspace.PlanTier.choices)
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name="subscriptions")
     seats = models.PositiveIntegerField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     renews_at = models.DateTimeField(null=True, blank=True)

@@ -31,6 +31,7 @@ import {
   BellIcon,
   ChevronDown,
   Trash2Icon,
+  CreditCard,
 } from "lucide-react";
 
 import { CoworkerStatusGlyph } from "@/components/coworker-status";
@@ -41,7 +42,16 @@ import { apiFetch } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { deleteConversation } from "@/lib/chat";
 import { useCoworkerStatuses } from "@/lib/coworker-status";
-import type { Conversation, Coworker } from "@/lib/types";
+import type { Conversation, Coworker, User, Workspace, WorkspaceRole } from "@/lib/types";
+
+// Advanced surfaces the backend restricts by role. Rather than let everyone
+// click into an access-denied page, we hide the entry unless the user's
+// workspace role can actually use it. Owners/admins see everything below.
+const ROLE_GATED: Record<string, WorkspaceRole[]> = {
+  "/governance": ["owner", "admin", "security_admin", "auditor"],
+  "/settings/enterprise": ["owner", "admin", "security_admin"],
+  "/creator": ["owner", "admin", "billing_admin"],
+};
 
 // `match` lists extra path prefixes that should keep this item highlighted —
 // e.g. Coworkers stays active on /agent-teams because Teams is now a sub-tab
@@ -85,6 +95,7 @@ const COLLAPSIBLE: NavGroup[] = [
     items: [
       { href: "/settings/workspace", label: "Workspace", icon: Settings },
       { href: "/settings/organization", label: "Organization", icon: Building2 },
+      { href: "/settings/billing", label: "Billing & plan", icon: CreditCard },
       { href: "/settings/integrations", label: "Integrations", icon: Plug },
       { href: "/settings/notifications", label: "Notifications", icon: BellIcon },
       { href: "/settings/enterprise", label: "Enterprise controls", icon: ShieldAlert },
@@ -179,6 +190,10 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [coworkers, setCoworkers] = useState<Coworker[]>([]);
+  const [isStaff, setIsStaff] = useState(false);
+  // null until resolved; role-gated items stay hidden until we know the role,
+  // so a privileged surface never flashes for someone who can't use it.
+  const [myRole, setMyRole] = useState<WorkspaceRole | null>(null);
   const statuses = useCoworkerStatuses(workspaceId, 30_000);
 
   useEffect(() => {
@@ -199,8 +214,52 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       } catch {
         // Same: the coworkers section just stays hidden.
       }
+      try {
+        const workspace = await apiFetch<Workspace>(`/workspaces/${id}`);
+        setMyRole(workspace.my_role);
+      } catch {
+        // Without a role, gated items stay hidden — the safe default.
+      }
     })();
   }, [pathname]);
+
+  useEffect(() => {
+    if (!getTokens()) return;
+    void apiFetch<User>("/me")
+      .then((me) => setIsStaff(me.is_staff))
+      .catch(() => {
+        // Plan catalog admin link just stays hidden without /me.
+      });
+  }, []);
+
+  // Platform staff (Django is_staff) additionally get the global plan
+  // catalog editor — everyone else only sees their own workspace's billing.
+  const withStaffExtras: NavGroup[] = isStaff
+    ? COLLAPSIBLE.map((group) =>
+        group.label === "Settings"
+          ? {
+              ...group,
+              items: [
+                ...group.items,
+                { href: "/settings/plans", label: "Plan catalog", icon: CreditCard },
+              ],
+            }
+          : group
+      )
+    : COLLAPSIBLE;
+
+  // Drop role-restricted items the current user can't use. Platform staff see
+  // everything (they support all workspaces); everyone else is gated by their
+  // membership role.
+  const canSee = (href: string): boolean => {
+    const allowed = ROLE_GATED[href];
+    if (!allowed) return true;
+    if (isStaff) return true;
+    return myRole !== null && allowed.includes(myRole);
+  };
+  const navGroups: NavGroup[] = withStaffExtras
+    .map((group) => ({ ...group, items: group.items.filter((item) => canSee(item.href)) }))
+    .filter((group) => group.items.length > 0);
 
   async function handleDeleteRecent(conv: Conversation) {
     if (!window.confirm(`Delete "${conv.title || "Untitled conversation"}"? Its messages are removed permanently.`)) return;
@@ -253,7 +312,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           ))}
         </ul>
 
-        {COLLAPSIBLE.map((group) => (
+        {navGroups.map((group) => (
           <CollapsibleGroup
             key={group.label}
             group={group}

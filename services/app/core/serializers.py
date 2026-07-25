@@ -43,8 +43,8 @@ def validate_model_binding_value(value: dict) -> dict:
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "email", "display_name", "avatar_url", "mfa_enabled", "created_at"]
-        read_only_fields = ["id", "email", "mfa_enabled", "created_at"]
+        fields = ["id", "email", "display_name", "avatar_url", "mfa_enabled", "is_staff", "created_at"]
+        read_only_fields = ["id", "email", "mfa_enabled", "is_staff", "created_at"]
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -84,11 +84,25 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 class WorkspaceSerializer(serializers.ModelSerializer):
     owner_id = serializers.UUIDField(source="owner.id", read_only=True)
+    my_role = serializers.SerializerMethodField()
 
     class Meta:
         model = Workspace
-        fields = ["id", "name", "type", "plan_tier", "owner_id", "created_at"]
-        read_only_fields = ["id", "type", "plan_tier", "owner_id", "created_at"]
+        fields = ["id", "name", "type", "plan_tier", "owner_id", "my_role", "created_at"]
+        read_only_fields = ["id", "type", "plan_tier", "owner_id", "my_role", "created_at"]
+
+    def get_my_role(self, obj: Workspace) -> str | None:
+        """The requesting user's own membership role — lets the client gate
+        role-restricted surfaces (governance, enterprise, creator payouts)
+        instead of routing everyone into an access-denied page."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return None
+        return (
+            obj.members.filter(user_id=request.user.id)
+            .values_list("role", flat=True)
+            .first()
+        )
 
 
 class ProviderCredentialSerializer(serializers.ModelSerializer):

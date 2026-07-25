@@ -6,8 +6,19 @@ export type User = {
   display_name: string | null;
   avatar_url: string | null;
   mfa_enabled: boolean;
+  is_staff: boolean;
   created_at: string;
 };
+
+export type WorkspaceRole =
+  | "owner"
+  | "admin"
+  | "member"
+  | "guest"
+  | "security_admin"
+  | "billing_admin"
+  | "developer_admin"
+  | "auditor";
 
 export type Workspace = {
   id: string;
@@ -15,6 +26,9 @@ export type Workspace = {
   type: string;
   plan_tier: string;
   owner_id: string;
+  // The requesting user's own role in this workspace, used to gate
+  // role-restricted nav. Null when it can't be resolved.
+  my_role: WorkspaceRole | null;
   created_at: string;
 };
 
@@ -217,6 +231,41 @@ export type Integration = {
   config: Record<string, unknown>;
   enabled: boolean;
   workspace_token: string;
+};
+
+// --- Billing: subscription plans -----------------------------------------
+
+export type SubscriptionPlan = {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  price_usd: string;
+  // null = unlimited
+  max_coworkers: number | null;
+  max_agent_teams: number | null;
+  max_tasks_per_month: number | null;
+  max_seats: number | null;
+  is_default: boolean;
+  active: boolean;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type SubscriptionUsage = {
+  coworkers: number;
+  agent_teams: number;
+  tasks_per_month: number;
+  seats: number;
+};
+
+export type Subscription = {
+  plan: SubscriptionPlan | null;
+  status: "active" | "past_due" | "cancelled";
+  seats: number | null;
+  renews_at: string | null;
+  usage: SubscriptionUsage;
 };
 
 // --- Phase 3: enterprise governance and marketplace economy ----------
@@ -587,6 +636,7 @@ export type TaskStatus =
   | "pending"
   | "in_progress"
   | "needs_approval"
+  | "needs_input"
   | "blocked"
   | "completed"
   | "failed";
@@ -606,6 +656,9 @@ export type BackgroundTask = {
   parent_task_id: string | null;
   result: string;
   error_message: string;
+  // The clarifying question the coworker is waiting on, present only while
+  // status is "needs_input".
+  pending_question: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -617,6 +670,7 @@ export type Notification = {
   type:
     | "task_completed"
     | "approval_requested"
+    | "input_requested"
     | "workflow_failed"
     | "mention"
     | "billing"
@@ -629,6 +683,7 @@ export type Notification = {
     title?: string;
     status?: TaskStatus;
     tool_name?: string;
+    question?: string;
     research_run_id?: string;
     monitor_id?: string;
     change_summary?: string;

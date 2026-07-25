@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { CheckIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,8 +27,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
-import { MODEL_OPTIONS } from "@/lib/coworkers";
-import type { Coworker, ModelId } from "@/lib/types";
+import { MODEL_OPTIONS, RISK_BADGE_CLASS, RISK_LABELS } from "@/lib/coworkers";
+import type { Coworker, ModelId, Tool } from "@/lib/types";
 
 export default function HireCoworkerPage() {
   const router = useRouter();
@@ -36,6 +38,8 @@ export default function HireCoworkerPage() {
   const [roleDescription, setRoleDescription] = useState("");
   const [primaryModel, setPrimaryModel] =
     useState<ModelId>("deepseek-v4-flash");
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set());
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,8 +53,31 @@ export default function HireCoworkerPage() {
       .then(setWorkspaceId)
       .finally(() => setIsResolvingWorkspace(false));
 
+    // Pre-select the safe tools so a new coworker can do something useful from
+    // the first message; the person can trim or add higher-risk tools here or
+    // later on the coworker's page.
+    void apiFetch<Tool[]>("/tools")
+      .then((all) => {
+        setTools(all);
+        setSelectedToolIds(
+          new Set(all.filter((t) => t.risk_classification === "safe").map((t) => t.id))
+        );
+      })
+      .catch(() => {
+        // The picker just stays empty; tools can still be added afterward.
+      });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function toggleTool(id: string) {
+    setSelectedToolIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function hire(
     coworkerName: string,
@@ -73,6 +100,19 @@ export default function HireCoworkerPage() {
           }),
         }
       );
+      // Attach the chosen tools before the first turn so the coworker can
+      // actually act on what it's asked. Individual failures are tolerated —
+      // any tool that didn't attach can be added later on its page.
+      if (selectedToolIds.size > 0) {
+        await Promise.allSettled(
+          [...selectedToolIds].map((toolId) =>
+            apiFetch(`/coworkers/${created.id}/tools`, {
+              method: "POST",
+              body: JSON.stringify({ tool_id: toolId }),
+            })
+          )
+        );
+      }
       // Drop straight into a chat where the coworker introduces itself and asks
       // its setup questions, which you answer inline. The ?onboard=1 flag tells
       // the conversation page to fire that coworker-first opening turn.
@@ -201,6 +241,53 @@ export default function HireCoworkerPage() {
                     ?.description ?? "Choose the model this coworker will use."}
                 </p>
               </div>
+
+              {tools.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Tools</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Safe tools are pre-selected so {name.trim() || "your coworker"} can
+                    help right away. Sensitive and dangerous tools still ask for your
+                    approval before running.
+                  </p>
+                  <ul className="mt-1 flex flex-col divide-y rounded-lg border">
+                    {tools.map((tool) => {
+                      const checked = selectedToolIds.has(tool.id);
+                      return (
+                        <li key={tool.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggleTool(tool.id)}
+                            aria-pressed={checked}
+                            className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/40"
+                          >
+                            <span
+                              className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border ${
+                                checked
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-input"
+                              }`}
+                            >
+                              {checked ? <CheckIcon className="size-3" /> : null}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{tool.name}</span>
+                                <Badge className={RISK_BADGE_CLASS[tool.risk_classification]}>
+                                  {RISK_LABELS[tool.risk_classification]}
+                                </Badge>
+                              </span>
+                              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                {tool.description}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
             </CardContent>
             <CardFooter>
               <Button type="submit" disabled={busyKey !== null}>

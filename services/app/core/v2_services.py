@@ -16,6 +16,7 @@ from django.utils import timezone
 from croniter import croniter
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
+from core.billing import enforce_agent_team_limit, enforce_monthly_task_limit
 from core.coworkers import create_coworker
 from core.interface import write_audit_log
 from core.models import (
@@ -57,6 +58,7 @@ def require_workspace_admin(user: User, workspace: Workspace) -> WorkspaceMember
 
 def create_agent_team(*, workspace: Workspace, user: User, payload: dict[str, Any]) -> AgentTeam:
     require_workspace_admin(user, workspace)
+    enforce_agent_team_limit(workspace)
     members = payload.get("members") or []
     if not members:
         raise ValidationError({"members": "At least one coworker is required."})
@@ -141,6 +143,7 @@ def start_agent_team_run(team: AgentTeam, *, user: User, objective: str) -> Agen
         raise ValidationError({"objective": "An objective is required."})
     if not WorkspaceMember.objects.filter(workspace=team.workspace, user=user).exists():
         raise PermissionDenied("You are not a member of this workspace.")
+    enforce_monthly_task_limit(team.workspace)
     run = AgentTeamRun.objects.create(
         agent_team=team, version=team.current_version, objective=objective, created_by=user
     )

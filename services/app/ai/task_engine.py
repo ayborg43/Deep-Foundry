@@ -36,6 +36,33 @@ from core.permissions import resolve_tool_permission
 
 MAX_TASK_ITERATIONS = 10
 
+# A built-in tool every coworker can call during a background task to ask the
+# human who assigned it a clarifying question. It never executes like a normal
+# tool — the engine pauses the task in `needs_input` until the person replies,
+# then feeds their answer back as the tool result and resumes. This is what
+# makes "hand off and walk away" safe: the coworker can stop and ask instead of
+# guessing when it's genuinely stuck.
+ASK_USER_TOOL_NAME = "ask_user"
+_ASK_USER_TOOL = ToolDefinition(
+    name=ASK_USER_TOOL_NAME,
+    description=(
+        "Ask the person who assigned this task a clarifying question when you "
+        "genuinely cannot proceed without their input — a decision only they can "
+        "make, or missing information you cannot reasonably infer. Use sparingly. "
+        "The task pauses until they reply, then you continue with their answer."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "The specific question to ask the person.",
+            }
+        },
+        "required": ["question"],
+    },
+)
+
 
 def _serialize_message(message: ChatMessage) -> dict[str, Any]:
     return {
@@ -116,6 +143,8 @@ def execute_background_task(task_id: UUID | str) -> None:
             ToolDefinition(name=tool.name, description=tool.description, parameters=tool.input_schema)
             for tool in tools
         ]
+        # ask_user is always available in a task, even with no tools attached.
+        definitions.append(_ASK_USER_TOOL)
         router = build_model_router(
             workspace_id=task.workspace_id,
             coworker_id=task.coworker_id,
@@ -150,6 +179,33 @@ def execute_background_task(task_id: UUID | str) -> None:
                         reply.role == "tool" and reply.tool_call_id == call.id for reply in messages
                     ):
                         continue
+                    if call.name == ASK_USER_TOOL_NAME:
+                        question = str(call.arguments.get("question", "")).strip() or (
+                            "Could you clarify how you'd like me to proceed?"
+                        )
+                        report_task_status(
+                            task.id,
+                            "needs_input",
+                            execution_state={
+                                **task.execution_state,
+                                "messages": [_serialize_message(m) for m in messages],
+                                "pending_question": {
+                                    "tool_call_id": call.id,
+                                    "question": question,
+                                },
+                            },
+                        )
+                        write_audit_log(
+                            actor_type="coworker",
+                            actor_id=task.coworker_id,
+                            action="task.input_requested",
+                            resource_type="task",
+                            resource_id=task.id,
+                            workspace_id=task.workspace_id,
+                            metadata={"tool_call_id": call.id, "question": question},
+                        )
+                        _notify(task, "input_requested", question=question)
+                        return
                     tool = tools_by_name.get(call.name)
                     if tool is None:
                         messages.append(
