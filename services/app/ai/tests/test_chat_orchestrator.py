@@ -13,7 +13,12 @@ from unittest.mock import patch
 from django.db import connection
 from django.test import TestCase, TransactionTestCase
 
-from ai.chat_orchestrator import _advance_message_tool_calls, resume_turn, start_turn
+from ai.chat_orchestrator import (
+    _advance_message_tool_calls,
+    resume_turn,
+    start_opening_turn,
+    start_turn,
+)
 from ai.model_router.adapters.deepseek_cloud import DeepSeekCloudAdapter
 from ai.model_router.errors import AdapterError
 from ai.models import Conversation, ConversationParticipant, Message
@@ -169,6 +174,35 @@ class SimpleResponseTests(ChatOrchestratorTestBase):
         self.assertEqual(messages[1].sender_type, Message.SenderType.COWORKER)
         self.assertEqual(messages[1].content, "Hello there")
         self.assertEqual(messages[1].status, Message.Status.COMPLETE)
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_opening_turn_greets_without_a_user_message(self, mock_stream):
+        mock_stream.return_value = _stream(
+            _content_chunk("Hi, I'm Aria — what should I prioritize first?"),
+            _finish_chunk("stop"),
+        )
+        events = list(
+            start_opening_turn(
+                conversation=self.conversation,
+                coworker_id=self.coworker.id,
+                workspace_id=self.workspace.id,
+            )
+        )
+        self.assertEqual([e.event for e in events], ["token", "message_complete"])
+
+        messages = list(
+            Message.objects.filter(conversation=self.conversation).order_by("created_at")
+        )
+        # Only the coworker's greeting is stored — the onboarding instruction is
+        # injected into the model call, never persisted as a user message.
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].sender_type, Message.SenderType.COWORKER)
+        self.assertEqual(messages[0].content, "Hi, I'm Aria — what should I prioritize first?")
+
+        # The model was prompted with the onboarding instruction as a user turn.
+        payload = mock_stream.call_args.args[1]
+        self.assertEqual(payload["messages"][-1]["role"], "user")
+        self.assertIn("just hired you", payload["messages"][-1]["content"])
 
     @patch.object(DeepSeekCloudAdapter, "_post_stream")
     def test_missing_coworker_yields_error_event(self, mock_stream):

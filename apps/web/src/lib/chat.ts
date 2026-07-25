@@ -157,3 +157,13 @@ export function resumeTurn(
 ): Promise<void> {
   return streamTurn(`/conversations/${conversationId}/messages/stream`, { method: "GET" }, onEvent);
 }
+
+// Coworker-first opening turn for a brand-new conversation: the coworker
+// introduces itself and asks its setup questions, which the user answers
+// through the ordinary composer. Only valid while the conversation is empty.
+export function openingTurn(
+  conversationId: string,
+  onEvent: (event: ChatSSEEvent) => void
+): Promise<void> {
+  return streamTurn(`/conversations/${conversationId}/opening`, { method: "POST" }, onEvent);
+}

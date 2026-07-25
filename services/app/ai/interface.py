@@ -23,6 +23,7 @@ from uuid import UUID
 from ai.chat_orchestrator import ChatEvent
 from ai.chat_orchestrator import regenerate_turn as _regenerate_turn
 from ai.chat_orchestrator import resume_turn as _resume_turn
+from ai.chat_orchestrator import start_opening_turn as _start_opening_turn
 from ai.chat_orchestrator import start_turn as _start_turn
 from ai.models import Conversation, Message
 
@@ -31,6 +32,7 @@ __all__ = [
     "ConversationNotFoundError",
     "MessageNotFoundError",
     "start_turn",
+    "start_opening_turn",
     "resume_turn",
     "regenerate_turn",
 ]
@@ -81,6 +83,15 @@ def resume_turn(
 ) -> Iterator[ChatEvent]:
     conversation = _get_conversation(conversation_id)
     yield from _resume_turn(
+        conversation=conversation, coworker_id=coworker_id, workspace_id=workspace_id
+    )
+
+
+def start_opening_turn(
+    *, conversation_id: UUID | str, coworker_id: UUID | str, workspace_id: UUID | str
+) -> Iterator[ChatEvent]:
+    conversation = _get_conversation(conversation_id)
+    yield from _start_opening_turn(
         conversation=conversation, coworker_id=coworker_id, workspace_id=workspace_id
     )
 

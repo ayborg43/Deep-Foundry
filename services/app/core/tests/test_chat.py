@@ -210,6 +210,47 @@ class MessageSendStreamTests(ChatTestBase):
         self.assertEqual([e for e, _ in events], ["token", "message_complete"])
         self.assertEqual(events[-1][1]["content"], "Hi there")
 
+
+class ConversationOpeningTests(ChatTestBase):
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_opening_turn_streams_coworker_greeting(self, mock_stream):
+        mock_stream.return_value = _stream(
+            _content_chunk("Hi, I'm Aria — what should I focus on?"), _finish_chunk("stop")
+        )
+        conversation = self._create_conversation()
+
+        response = self.client.post(
+            reverse("conversation-opening", kwargs={"conversation_id": conversation.id})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        events = _parse_sse(response.streaming_content)
+        self.assertEqual([e for e, _ in events], ["token", "message_complete"])
+
+        messages = Message.objects.filter(conversation=conversation)
+        self.assertEqual(messages.count(), 1)
+        greeting = messages.get()
+        self.assertEqual(greeting.sender_type, Message.SenderType.COWORKER)
+        self.assertFalse(messages.filter(sender_type=Message.SenderType.USER).exists())
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_opening_turn_rejected_once_conversation_has_messages(self, mock_stream):
+        mock_stream.return_value = _stream(_content_chunk("Hi there"), _finish_chunk("stop"))
+        conversation = self._create_conversation()
+        self._send(conversation, "Hello")  # now the conversation has messages
+
+        response = self.client.post(
+            reverse("conversation-opening", kwargs={"conversation_id": conversation.id})
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_stranger_cannot_open_conversation(self):
+        conversation = self._create_conversation()
+        self._auth_as(self.stranger)
+        response = self.client.post(
+            reverse("conversation-opening", kwargs={"conversation_id": conversation.id})
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_send_message_requires_content(self):
         conversation = self._create_conversation()
         response = self.client.post(

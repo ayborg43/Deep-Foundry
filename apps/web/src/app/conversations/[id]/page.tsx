@@ -36,6 +36,7 @@ import {
   getConversation,
   listMessages,
   listPendingApprovalRequests,
+  openingTurn,
   resumeTurn,
   sendMessage,
   type ChatSSEEvent,
@@ -274,6 +275,9 @@ export default function ConversationPage() {
   const [policyDialogOpen, setPolicyDialogOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Guards the one-time coworker-first opening turn so a re-render (or the
+  // message refresh it triggers) can't fire it twice.
+  const didOnboardRef = useRef(false);
 
   function startVoiceInput() {
     const browserWindow = window as typeof window & { webkitSpeechRecognition?: new () => { lang: string; interimResults: boolean; onresult: (event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void; onend: () => void; onerror: () => void; start: () => void } };
@@ -407,6 +411,34 @@ export default function ConversationPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, streamingText, liveToolCalls, pendingApproval]);
+
+  // Freshly-hired coworkers arrive here with ?onboard=1 on an empty
+  // conversation: kick off the coworker-first opening turn so it greets and
+  // asks its setup questions, which the user answers through the composer.
+  useEffect(() => {
+    if (isLoading || didOnboardRef.current) return;
+    if (searchParams.get("onboard") !== "1") return;
+    if (messages.length > 0 || pendingApproval) return;
+    didOnboardRef.current = true;
+
+    async function onboard() {
+      setIsSending(true);
+      setTurnError(null);
+      resetTurnState();
+      try {
+        await openingTurn(conversationId, handleEvent);
+      } catch (err) {
+        setTurnError(
+          err instanceof ApiRequestError ? err.message : "Couldn't start the introduction."
+        );
+        setIsSending(false);
+        resetTurnState();
+      }
+    }
+
+    void onboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
 
   function resetTurnState() {
     setStreamingText("");

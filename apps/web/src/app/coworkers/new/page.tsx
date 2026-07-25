@@ -24,6 +24,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
+import { createConversation } from "@/lib/chat";
 import { MODEL_OPTIONS } from "@/lib/coworkers";
 import type { Coworker, ModelId } from "@/lib/types";
 
@@ -72,7 +73,21 @@ export default function HireCoworkerPage() {
           }),
         }
       );
-      router.push(`/coworkers/${created.id}`);
+      // Drop straight into a chat where the coworker introduces itself and asks
+      // its setup questions, which you answer inline. The ?onboard=1 flag tells
+      // the conversation page to fire that coworker-first opening turn.
+      try {
+        const conversation = await createConversation(
+          workspaceId,
+          created.id,
+          `Getting started with ${created.name}`
+        );
+        router.push(`/conversations/${conversation.id}?onboard=1`);
+      } catch {
+        // If the conversation can't be created, the coworker still exists —
+        // fall back to its profile so the hire isn't lost.
+        router.push(`/coworkers/${created.id}`);
+      }
     } catch (err) {
       setError(
         err instanceof ApiRequestError

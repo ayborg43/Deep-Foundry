@@ -67,6 +67,19 @@ _APPROVAL_SUMMARY_PROMPT = (
     "No quotes, no trailing period, nothing else."
 )
 
+# Injected as the (unsaved) first user turn when a freshly hired coworker opens
+# its own conversation, so it introduces itself and gathers what it needs before
+# any work starts. The reply is a normal coworker message the human answers
+# inline — nothing here is persisted except that reply.
+_OPENING_TURN_PROMPT = (
+    "A teammate just hired you and opened this conversation. In one or two short "
+    "sentences, greet them and acknowledge your role, then ask the 1-3 specific "
+    "questions you genuinely need answered to do this job well (scope, priorities, "
+    "which tools or accounts to use, preferences, how they want to review your "
+    "work). Ask only what matters, and don't overwhelm them. Do not start any "
+    "work yet — just introduce yourself and ask."
+)
+
 
 def summarize_approval(
     router: ModelRouter,
@@ -148,6 +161,22 @@ def resume_turn(
     )
 
 
+def start_opening_turn(
+    *, conversation: Conversation, coworker_id: UUID | str, workspace_id: UUID | str
+) -> Iterator[ChatEvent]:
+    """Coworker-first turn for a just-created conversation: no user message is
+    stored; an onboarding instruction is injected as an unsaved user prompt so
+    the coworker greets and asks its setup questions. The greeting is persisted
+    as a normal coworker message, which the human then answers inline through
+    the ordinary send path."""
+    yield from _continue_turn(
+        conversation=conversation,
+        coworker_id=coworker_id,
+        workspace_id=workspace_id,
+        opening_instruction=_OPENING_TURN_PROMPT,
+    )
+
+
 def regenerate_turn(
     *,
     conversation: Conversation,
@@ -181,6 +210,7 @@ def _continue_turn(
     workspace_id: UUID | str,
     exclude_message_ids: frozenset = frozenset(),
     link_new_message_to: Message | None = None,
+    opening_instruction: str | None = None,
 ) -> Iterator[ChatEvent]:
     try:
         coworker_config = get_coworker_config(coworker_id)
@@ -234,6 +264,12 @@ def _continue_turn(
                     )
                 )
             context_messages.append(ChatMessage(role="system", content="\n\n".join(sections)))
+
+    # Coworker-first opening turn: there's no stored user message, so inject the
+    # onboarding instruction as the (unsaved) triggering user prompt. Kept last
+    # in context_messages so it lands as the final message the model sees.
+    if opening_instruction is not None:
+        context_messages.append(ChatMessage(role="user", content=opening_instruction))
 
     for _ in range(MAX_TOOL_ITERATIONS):
         unresolved = _find_unresolved_tool_message(conversation, exclude_message_ids)

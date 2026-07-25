@@ -169,6 +169,27 @@ class MessageListSendView(APIView):
         return _stream_events(events)
 
 
+class ConversationOpeningView(APIView):
+    """POST /conversations/{id}/opening — a coworker-first turn for a brand-new
+    conversation: the coworker introduces itself and asks its setup questions,
+    which the human answers inline. Only valid while the conversation is empty,
+    so it can't be replayed to spam greetings mid-thread."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, conversation_id: str) -> StreamingHttpResponse:
+        conversation = _get_conversation_for_member(request.user, conversation_id)
+        if conversation.messages.exists():
+            raise ValidationError("This conversation already has messages.")
+        coworker_id = _get_conversation_coworker_id(conversation)
+        events = ai_interface.start_opening_turn(
+            conversation_id=conversation.id,
+            coworker_id=coworker_id,
+            workspace_id=conversation.workspace_id,
+        )
+        return _stream_events(events)
+
+
 class MessageStreamView(APIView):
     """GET /conversations/{id}/messages/stream — resumes a turn that's
     currently blocked on an approval decision, once one has been made."""

@@ -1,6 +1,11 @@
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from core.billing_views import (
+    PlanAdminDetailView,
+    PlanAdminListCreateView,
+    PlanCatalogView,
+)
 from core.chat_views import (
     ApprovalPolicyDeleteView,
     ApprovalPolicyListCreateView,
@@ -10,6 +15,7 @@ from core.chat_views import (
     ApprovalRequestStatsView,
     ConversationDetailView,
     ConversationListCreateView,
+    ConversationOpeningView,
     MessageListSendView,
     MessagePatchView,
     MessageRegenerateView,
@@ -182,6 +188,9 @@ urlpatterns = [
     path("workspaces/<uuid:workspace_id>/api-tokens", ApiTokenListCreateView.as_view(), name="api-token-list-create"),
     path("workspaces/<uuid:workspace_id>/api-tokens/<uuid:token_id>", ApiTokenRevokeView.as_view(), name="api-token-revoke"),
     path("workspaces/<uuid:workspace_id>/subscription", SubscriptionView.as_view(), name="subscription-detail"),
+    path("plans", PlanCatalogView.as_view(), name="plan-catalog"),
+    path("admin/plans", PlanAdminListCreateView.as_view(), name="plan-admin-list-create"),
+    path("admin/plans/<uuid:plan_id>", PlanAdminDetailView.as_view(), name="plan-admin-detail"),
     path(
         "workspaces/<uuid:workspace_id>/provider-credentials/<uuid:cred_id>",
         ProviderCredentialDestroyView.as_view(),
@@ -236,6 +245,11 @@ urlpatterns = [
         "conversations/<uuid:conversation_id>/messages",
         MessageListSendView.as_view(),
         name="conversation-message-list-send",
+    ),
+    path(
+        "conversations/<uuid:conversation_id>/opening",
+        ConversationOpeningView.as_view(),
+        name="conversation-opening",
     ),
     path(
         "conversations/<uuid:conversation_id>/messages/stream",
