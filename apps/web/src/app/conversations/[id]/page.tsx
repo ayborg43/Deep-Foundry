@@ -280,6 +280,9 @@ export default function ConversationPage() {
   // Guards the one-time coworker-first opening turn so a re-render (or the
   // message refresh it triggers) can't fire it twice.
   const didOnboardRef = useRef(false);
+  // Same guard for the draft handed over from the home composer: it should be
+  // sent automatically, not left sitting in the box for a second click.
+  const didSendDraftRef = useRef(false);
 
   function startVoiceInput() {
     const browserWindow = window as typeof window & { webkitSpeechRecognition?: new () => { lang: string; interimResults: boolean; onresult: (event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void; onend: () => void; onerror: () => void; start: () => void } };
@@ -442,6 +445,19 @@ export default function ConversationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
 
+  // A message typed in the home composer is handed over as ?draft=... — send it
+  // automatically so the coworker starts working, instead of leaving it in the
+  // box for a second click.
+  useEffect(() => {
+    if (isLoading || didSendDraftRef.current) return;
+    const draft = searchParams.get("draft")?.trim();
+    if (!draft) return;
+    if (messages.length > 0 || pendingApproval) return;
+    didSendDraftRef.current = true;
+    void sendContent(draft);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
+
   function resetTurnState() {
     setStreamingText("");
     setLiveToolCalls([]);
@@ -518,9 +534,8 @@ export default function ConversationPage() {
     }
   }
 
-  async function handleSend(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const content = input.trim();
+  async function sendContent(rawContent: string) {
+    const content = rawContent.trim();
     if (!content || isSending || pendingApproval) return;
 
     setInput("");
@@ -554,6 +569,11 @@ export default function ConversationPage() {
       setIsSending(false);
       resetTurnState();
     }
+  }
+
+  function handleSend(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void sendContent(input);
   }
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
