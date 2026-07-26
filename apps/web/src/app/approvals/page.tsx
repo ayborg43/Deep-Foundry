@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch, ApiRequestError } from "@/lib/api";
+import { tabHidden } from "@/lib/poll";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { RISK_BADGE_CLASS, RISK_LABELS } from "@/lib/coworkers";
 import type { ApprovalPolicy, ApprovalRequestData } from "@/lib/types";
@@ -62,7 +63,9 @@ export default function ApprovalsPage() {
         setError(err instanceof ApiRequestError ? err.message : "Couldn't load approvals.");
       });
     }, 0);
-    const timer = window.setInterval(() => void load(), 15_000);
+    const timer = window.setInterval(() => {
+      if (!tabHidden()) void load();
+    }, 15_000);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(timer);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiFetch } from "./api";
+import { tabHidden } from "./poll";
 import type { CoworkerStatus, CoworkerStatusState } from "./types";
 
 export const COWORKER_STATUS_META: Record<
@@ -68,7 +69,9 @@ export function useCoworkerStatuses(
       }
     }
     void load();
-    const timer = window.setInterval(() => void load(), intervalMs);
+    const timer = window.setInterval(() => {
+      if (!tabHidden()) void load();
+    }, intervalMs);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

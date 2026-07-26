@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
 import { apiFetch, ApiRequestError } from "@/lib/api";
+import { tabHidden } from "@/lib/poll";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
 import { useCoworkerStatuses } from "@/lib/coworker-status";
@@ -140,7 +141,9 @@ export default function HomePage() {
           }
         };
         await loadApprovals();
-        timer = window.setInterval(() => void loadApprovals(), 15_000);
+        timer = window.setInterval(() => {
+          if (!tabHidden()) void loadApprovals();
+        }, 15_000);
       }
     })();
     return () => {

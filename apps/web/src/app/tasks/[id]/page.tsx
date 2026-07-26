@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MessageCircleQuestionIcon } from "lucide-react";
 
 import { FormattedMessage } from "@/components/formatted-message";
@@ -13,7 +13,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { apiFetch, ApiRequestError } from "@/lib/api";
 import { getTokens } from "@/lib/auth";
+import { tabHidden } from "@/lib/poll";
 import type { BackgroundTask } from "@/lib/types";
+
+// A task in one of these states won't change on its own — stop polling.
+const TERMINAL_STATUSES = new Set(["completed", "failed", "blocked"]);
 
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,17 +27,33 @@ export default function TaskDetailPage() {
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState("");
   const [respondBusy, setRespondBusy] = useState(false);
+  const pollRef = useRef<number | null>(null);
 
   async function load() {
-    try { setTask(await apiFetch<BackgroundTask>(`/tasks/${id}`)); }
-    catch (err) { setError(err instanceof ApiRequestError ? err.message : "Couldn't load task."); }
+    try {
+      const next = await apiFetch<BackgroundTask>(`/tasks/${id}`);
+      setTask(next);
+      // Once the task is finished it won't change without a user action (which
+      // reloads directly), so stop the 5s poll instead of hitting the API forever.
+      if (TERMINAL_STATUSES.has(next.status) && pollRef.current !== null) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : "Couldn't load task.");
+    }
   }
 
   useEffect(() => {
     if (!getTokens()) { router.push("/login"); return; }
     const initial = window.setTimeout(() => void load(), 0);
-    const timer = window.setInterval(load, 5_000);
-    return () => { window.clearTimeout(initial); window.clearInterval(timer); };
+    pollRef.current = window.setInterval(() => {
+      if (!tabHidden()) void load();
+    }, 5_000);
+    return () => {
+      window.clearTimeout(initial);
+      if (pollRef.current !== null) window.clearInterval(pollRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
 
