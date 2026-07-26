@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { ApprovalPolicyDialog } from "@/components/approval-policy-dialog";
+import { CoworkerToolsDialog } from "@/components/coworker-tools-dialog";
 import { FormattedMessage } from "@/components/formatted-message";
 import { ViewSources, evidenceFromCitations } from "@/components/research/source-panel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -273,6 +274,7 @@ export default function ConversationPage() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[] | null>(null);
   const statuses = useCoworkerStatuses(conversation?.workspace_id ?? null, 30_000);
   const [policyDialogOpen, setPolicyDialogOpen] = useState(false);
+  const [toolsDialogOpen, setToolsDialogOpen] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   // Guards the one-time coworker-first opening turn so a re-render (or the
@@ -873,11 +875,15 @@ export default function ConversationPage() {
                 <ClockIcon data-icon="inline-start" />
                 {isHandingOff ? "Queuing..." : "Run in background"}
               </Button>
-              <Button type="button" variant="ghost" size="sm" asChild>
-                <Link href={`/coworkers/${coworker.id}`} aria-label={`Manage ${coworker.name}'s tools`}>
-                  <WrenchIcon data-icon="inline-start" />
-                  Tools
-                </Link>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setToolsDialogOpen(true)}
+                aria-label={`Manage ${coworker.name}'s tools`}
+              >
+                <WrenchIcon data-icon="inline-start" />
+                Tools
               </Button>
             </div>
             <Button type="submit" size="icon" disabled={inputDisabled || !input.trim()}>
@@ -900,6 +906,18 @@ export default function ConversationPage() {
           args={pendingApproval.arguments}
         />
       ) : null}
+
+      <CoworkerToolsDialog
+        open={toolsDialogOpen}
+        onOpenChange={setToolsDialogOpen}
+        coworkerId={coworker.id}
+        coworkerName={coworker.name}
+        attachedTools={coworker.attached_tools}
+        allTools={[...toolsByName.values()]}
+        onAttachedChange={(next) =>
+          setCoworker((prev) => (prev ? { ...prev, attached_tools: next } : prev))
+        }
+      />
     </div>
 
     <aside className="hidden w-72 shrink-0 flex-col gap-4 self-start xl:flex" aria-label="Coworker dossier">
