@@ -10,6 +10,8 @@ import json
 from typing import Any
 from uuid import UUID
 
+from django.conf import settings
+
 from ai.chat_orchestrator import summarize_approval
 from ai.knowledge import search_coworker_knowledge
 from ai.memory import search_memory, write_memory
@@ -34,7 +36,7 @@ from core.interface import (
 )
 from core.permissions import resolve_tool_permission
 
-MAX_TASK_ITERATIONS = 10
+MAX_TASK_ITERATIONS = getattr(settings, "TASK_MAX_TOOL_ITERATIONS", 12)
 
 # A built-in tool every coworker can call during a background task to ask the
 # human who assigned it a clarifying question. It never executes like a normal

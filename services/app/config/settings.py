@@ -346,6 +346,14 @@ CELERY_BEAT_SCHEDULE = {
 PAYMENTS_CHECKOUT_BASE_URL = os.environ.get("PAYMENTS_CHECKOUT_BASE_URL", "")
 PAYMENTS_WEBHOOK_SECRET = os.environ.get("PAYMENTS_WEBHOOK_SECRET", "")
 
+# How many model<->tool cycles one turn may take before it's cut off. Chat
+# (a single reply) and background tasks (a whole run) get separate budgets.
+# Multi-step work — fetch news, read a few pages, send it, schedule it — needs
+# more than a handful, so these default generously but stay bounded. Tunable
+# via env without a code change.
+CHAT_MAX_TOOL_ITERATIONS = int(os.environ.get("CHAT_MAX_TOOL_ITERATIONS", "12"))
+TASK_MAX_TOOL_ITERATIONS = int(os.environ.get("TASK_MAX_TOOL_ITERATIONS", "12"))
+
 # Shared cache keeps API throttle counters consistent between ASGI workers and
 # replicas instead of silently reverting to process-local counters.
 CACHES = {

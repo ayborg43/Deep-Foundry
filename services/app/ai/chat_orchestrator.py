@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from django.conf import settings
 from django.db import transaction
 
 from ai.model_router.factory import build_model_router
@@ -57,8 +58,10 @@ logger = logging.getLogger(__name__)
 # Bounds one invocation's model-call <-> tool-call cycles. Each call to
 # start_turn/resume_turn gets its own fresh budget — this guards against a
 # single request looping forever, not against a coworker calling tools
-# across many separate turns.
-MAX_TOOL_ITERATIONS = 5
+# across many separate turns. Configurable via CHAT_MAX_TOOL_ITERATIONS: a
+# multi-step reply (search news → read pages → send → schedule) can need well
+# more than a handful of cycles.
+MAX_TOOL_ITERATIONS = getattr(settings, "CHAT_MAX_TOOL_ITERATIONS", 12)
 
 _APPROVAL_SUMMARY_PROMPT = (
     "You summarize a pending tool action for a human approval queue. Reply with "
@@ -385,7 +388,14 @@ def _continue_turn(
         # loop again: history now includes the tool result(s)
 
     yield ChatEvent(
-        "error", {"detail": "Tool-call loop exceeded the maximum number of iterations."}
+        "error",
+        {
+            "detail": (
+                "I took too many steps in a single reply and stopped before "
+                "finishing. Try a smaller request, or ask me to run it in the "
+                "background or on a schedule instead of doing it all at once."
+            )
+        },
     )
 
 

@@ -477,7 +477,7 @@ class MaxIterationTests(ChatOrchestratorTestBase):
         )
         events = self._start_turn("infinite search")
         self.assertEqual(events[-1].event, "error")
-        self.assertIn("maximum number of iterations", events[-1].data["detail"])
+        self.assertIn("too many steps", events[-1].data["detail"])
 
 
 class ConcurrentToolExecutionRaceTests(TransactionTestCase):
