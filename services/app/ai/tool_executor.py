@@ -43,6 +43,7 @@ from core.interface import (
     orchestrate_create_team,
     orchestrate_run_team,
     orchestrate_schedule_workflow,
+    send_workspace_telegram,
 )
 
 
@@ -280,6 +281,17 @@ def _send_email(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolR
     return ToolResult(output={"sent": count})
 
 
+def _send_telegram(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
+    text = str(arguments.get("text", "")).strip()
+    if not text:
+        raise ToolExecutionError("send_telegram requires a non-empty 'text'.")
+    result = send_workspace_telegram(workspace_id=workspace_id, text=text)
+    return ToolResult(
+        output={"sent": result.get("sent", 0), "recipients": result.get("recipients", 0)},
+        error=result.get("error"),
+    )
+
+
 def _post_tweet(arguments: dict[str, Any], *, workspace_id: UUID | str) -> ToolResult:
     """POST /2/tweets with the integration secret as the OAuth 2.0 user
     access token. Dedicated executor (vs _integration_post) because the X
@@ -401,6 +413,7 @@ _EXECUTORS = {
     "write_file": _write_file,
     "execute_code": _execute_code,
     "send_email": _send_email,
+    "send_telegram": _send_telegram,
     "create_calendar_event": _integration_executor("calendar"),
     "send_slack_message": _integration_executor("slack"),
     "send_discord_message": _integration_executor("discord"),
@@ -423,7 +436,7 @@ _EXECUTORS = {
         orchestrate_create_task, ("coworker", "title", "description")
     ),
     "schedule_workflow": _orchestration_executor(
-        orchestrate_schedule_workflow, ("name", "schedule_cron", "steps")
+        orchestrate_schedule_workflow, ("name", "schedule_cron", "steps", "require_review")
     ),
 }
 

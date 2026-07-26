@@ -263,6 +263,59 @@ def notify_workspace(
     return [row.id for row in created]
 
 
+def send_workspace_telegram(*, workspace_id: UUID | str, text: str) -> dict[str, Any]:
+    """Deliver `text` to the linked Telegram chats of this workspace's members.
+
+    Only reaches chats a user has verified with the bot (a TelegramConnection) —
+    never an arbitrary chat_id — so a coworker can notify people who opted in
+    without being able to message strangers. That bounded blast radius is why
+    the send_telegram tool is classified `safe`: it can run unattended (e.g. on
+    a schedule) without a per-send approval. Returns {sent, recipients, error?}.
+    """
+    from core.models import TelegramConnection
+    from core.telegram import (
+        TelegramError,
+        send_telegram_message,
+        telegram_is_configured,
+    )
+
+    body = (text or "").strip()
+    if not body:
+        return {"sent": 0, "recipients": 0, "error": "A non-empty 'text' is required."}
+    if not telegram_is_configured():
+        return {
+            "sent": 0,
+            "recipients": 0,
+            "error": "Telegram isn't configured on this instance.",
+        }
+    connections = list(
+        TelegramConnection.objects.filter(
+            user__workspace_memberships__workspace_id=workspace_id, enabled=True
+        ).distinct()
+    )
+    if not connections:
+        return {
+            "sent": 0,
+            "recipients": 0,
+            "error": (
+                "No Telegram account is linked in this workspace. Link one in "
+                "Settings → Notifications, then try again."
+            ),
+        }
+    sent = 0
+    failures: list[str] = []
+    for connection in connections:
+        try:
+            send_telegram_message(connection.private_chat_id, body)
+            sent += 1
+        except TelegramError as exc:  # one bad chat must not sink the others
+            failures.append(str(exc))
+    result: dict[str, Any] = {"sent": sent, "recipients": len(connections)}
+    if failures:
+        result["error"] = f"{len(failures)} delivery failure(s): {failures[0]}"
+    return result
+
+
 def get_enabled_integration(*, workspace_id: UUID | str, kind: str) -> dict[str, Any] | None:
     """Return one integration's runtime config without exposing ORM models to AI."""
     from core.encryption import decrypt_from_bytes
@@ -738,7 +791,7 @@ def orchestrate_create_task(
 
 def orchestrate_schedule_workflow(
     *, workspace_id: UUID | str, name: str, schedule_cron: str,
-    steps: list[dict[str, Any]],
+    steps: list[dict[str, Any]], require_review: bool | None = True,
 ) -> dict[str, Any]:
     from datetime import datetime as dt
 
@@ -771,9 +824,13 @@ def orchestrate_schedule_workflow(
             "coworker_id": str(assignee.id),
             "instructions": instructions,
         })
-    # Every scheduled workflow ends at a human checkpoint — orchestration
-    # must not remove the human from recurring work.
-    definition_steps.append({"type": "human_checkpoint", "title": "Review and approve"})
+    # A scheduled workflow ends at a human checkpoint by default so a person
+    # stays in the loop on recurring work. A coworker can pass
+    # require_review=false for a pure notification job (e.g. "just send me the
+    # news every hour") so an unattended schedule delivers without piling up an
+    # approval every single run. Only an explicit false skips it.
+    if require_review is not False:
+        definition_steps.append({"type": "human_checkpoint", "title": "Review and approve"})
     workflow = create_workflow(
         workspace=workspace, user=workspace.owner,
         name=str(name or "").strip()[:255] or "Scheduled workflow",

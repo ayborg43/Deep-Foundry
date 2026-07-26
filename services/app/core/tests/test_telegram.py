@@ -475,3 +475,49 @@ class TelegramDeliveryTests(TestCase):
         delivery = TelegramDelivery.objects.get(notification=notification)
         self.assertEqual(delivery.status, TelegramDelivery.Status.FAILED)
         self.assertEqual(delivery.last_error, "enqueue_failed")
+
+
+@override_settings(**TELEGRAM_SETTINGS)
+class SendTelegramToolTests(TestCase):
+    """The send_telegram coworker tool — what lets a coworker deliver news or
+    alerts to Telegram, including unattended on a schedule."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="tg-tool@example.com", password="correct horse battery staple"
+        )
+        self.workspace = Workspace.objects.create(
+            name="TG Tool", type=Workspace.WorkspaceType.PERSONAL, owner=self.user
+        )
+        WorkspaceMember.objects.create(
+            workspace=self.workspace, user=self.user, role=WorkspaceMember.Role.OWNER
+        )
+
+    def test_delivers_to_linked_members(self):
+        from ai.tool_executor import execute_tool
+
+        TelegramConnection.objects.create(
+            user=self.user, telegram_user_id=555, private_chat_id=555, enabled=True
+        )
+        with patch("core.telegram.send_telegram_message", return_value="42") as send:
+            result = execute_tool(
+                "send_telegram", {"text": "Top news today"}, workspace_id=self.workspace.id
+            )
+        self.assertIsNone(result.error)
+        self.assertEqual(result.output["sent"], 1)
+        send.assert_called_once_with(555, "Top news today")
+
+    def test_without_a_linked_account_returns_actionable_error(self):
+        from ai.tool_executor import execute_tool
+
+        result = execute_tool(
+            "send_telegram", {"text": "hi"}, workspace_id=self.workspace.id
+        )
+        self.assertEqual(result.output["sent"], 0)
+        self.assertIn("No Telegram account is linked", result.error)
+
+    def test_seeded_as_a_safe_tool(self):
+        from core.models import Tool
+
+        tool = Tool.objects.get(name="send_telegram")
+        self.assertEqual(tool.risk_classification, Tool.RiskClassification.SAFE)

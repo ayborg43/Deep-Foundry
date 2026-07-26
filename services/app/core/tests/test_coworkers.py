@@ -64,7 +64,7 @@ class ToolCatalogTests(CoworkerTestBase):
                 "web_search", "read_webpage", "read_document", "crawl_website",
                 "extract_structured_data", "browse_webpage",
                 "read_file", "write_file", "execute_code",
-                "send_email", "create_calendar_event", "send_slack_message",
+                "send_email", "send_telegram", "create_calendar_event", "send_slack_message",
                 "send_discord_message", "create_github_issue", "post_tweet", "send_webhook",
                 "create_presentation", "create_diagram", "record_video_analysis",
                 "propose_capability",
@@ -77,6 +77,38 @@ class ToolCatalogTests(CoworkerTestBase):
         self.client.credentials()
         response = self.client.get(reverse("tool-catalog-list"))
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ScheduleWorkflowReviewTests(CoworkerTestBase):
+    """A scheduled workflow appends a human checkpoint by default, but a pure
+    notification job (news → Telegram every hour) can opt out so an unattended
+    schedule doesn't pile up an approval every run."""
+
+    def test_require_review_false_skips_the_human_checkpoint(self):
+        from core.interface import orchestrate_schedule_workflow
+
+        self._create_coworker(name="Aria")
+        steps = [{
+            "coworker": "Aria",
+            "title": "Send news",
+            "instructions": "Search the latest news and send it to Telegram.",
+        }]
+
+        reviewed = orchestrate_schedule_workflow(
+            workspace_id=self.workspace.id, name="Hourly news",
+            schedule_cron="0 * * * *", steps=steps,
+        )
+        # coworker action + appended human checkpoint
+        self.assertEqual(reviewed["steps"], 2)
+
+        unattended = orchestrate_schedule_workflow(
+            workspace_id=self.workspace.id, name="Hourly news unattended",
+            schedule_cron="0 * * * *", steps=steps, require_review=False,
+        )
+        # coworker action only — no checkpoint to gate the delivery
+        self.assertEqual(unattended["steps"], 1)
+        self.assertTrue(unattended["scheduled"])
+        self.assertEqual(unattended["schedule_cron"], "0 * * * *")
 
 
 class CoworkerCreateTests(CoworkerTestBase):

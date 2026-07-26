@@ -42,6 +42,9 @@ _TOOL_ALIASES = {
     "read": "read_file", "file_read": "read_file", "read_files": "read_file",
     "write": "write_file", "file_write": "write_file", "write_files": "write_file",
     "email": "send_email", "mail": "send_email", "send_mail": "send_email",
+    "telegram": "send_telegram", "send_telegram_message": "send_telegram",
+    "telegram_bot": "send_telegram", "notify": "send_telegram",
+    "notification": "send_telegram", "messaging": "send_telegram",
 }
 # When the model leaves a coworker tool-less, give it these (approval-free)
 # defaults so it can still do useful work.
