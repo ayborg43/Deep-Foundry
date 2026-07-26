@@ -275,7 +275,7 @@ def send_workspace_telegram(*, workspace_id: UUID | str, text: str) -> dict[str,
     from core.models import TelegramConnection
     from core.telegram import (
         TelegramError,
-        send_telegram_message,
+        send_telegram_rich,
         telegram_is_configured,
     )
 
@@ -306,7 +306,7 @@ def send_workspace_telegram(*, workspace_id: UUID | str, text: str) -> dict[str,
     failures: list[str] = []
     for connection in connections:
         try:
-            send_telegram_message(connection.private_chat_id, body)
+            send_telegram_rich(connection.private_chat_id, body)
             sent += 1
         except TelegramError as exc:  # one bad chat must not sink the others
             failures.append(str(exc))

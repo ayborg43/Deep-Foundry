@@ -505,7 +505,46 @@ class SendTelegramToolTests(TestCase):
             )
         self.assertIsNone(result.error)
         self.assertEqual(result.output["sent"], 1)
-        send.assert_called_once_with(555, "Top news today")
+        # Delivered as HTML so Markdown renders instead of leaking raw markers.
+        send.assert_called_once_with(555, "Top news today", parse_mode="HTML")
+
+    def test_markdown_is_rendered_as_telegram_html(self):
+        from core.telegram import markdown_to_telegram_html
+
+        out = markdown_to_telegram_html(
+            "**World**\n- item [AP](https://ap.example) `code`\n<script>"
+        )
+        self.assertIn("<b>World</b>", out)
+        self.assertIn('<a href="https://ap.example">AP</a>', out)
+        self.assertIn("<code>code</code>", out)
+        self.assertIn("&lt;script&gt;", out)  # stray HTML escaped, not injected
+        self.assertNotIn("**", out)
+
+    def test_unparseable_html_falls_back_to_plain_text(self):
+        from ai.tool_executor import execute_tool
+        from core.telegram import TelegramPermanentError
+
+        TelegramConnection.objects.create(
+            user=self.user, telegram_user_id=777, private_chat_id=777, enabled=True
+        )
+        calls: list = []
+
+        def fake_send(chat_id, text, parse_mode=None):
+            calls.append((chat_id, text, parse_mode))
+            if parse_mode == "HTML":
+                raise TelegramPermanentError("can't parse entities")
+            return "1"
+
+        with patch("core.telegram.send_telegram_message", side_effect=fake_send):
+            result = execute_tool(
+                "send_telegram", {"text": "**Hi** there"}, workspace_id=self.workspace.id
+            )
+        self.assertEqual(result.output["sent"], 1)
+        self.assertEqual(calls[0][2], "HTML")  # tried HTML first
+        self.assertIsNone(calls[1][2])  # then plain
+        self.assertNotIn("<b>", calls[1][1])
+        self.assertNotIn("**", calls[1][1])
+        self.assertIn("Hi there", calls[1][1])
 
     def test_without_a_linked_account_returns_actionable_error(self):
         from ai.tool_executor import execute_tool
