@@ -14,5 +14,6 @@ argon2-cffi==25.1.0
 pyotp==2.10.0
 cryptography==49.0.0
 django-cors-headers==4.9.0
+whitenoise==6.9.0
 croniter==6.0.0
 httpx2==2.5.0  # test-only: required by starlette.testclient.TestClient for the AI module's FastAPI endpoints

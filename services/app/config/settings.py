@@ -59,6 +59,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static (Django admin CSS/JS, DRF browsable API) straight
+    # from the app process in production — no separate static server needed.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",  # must sit above CommonMiddleware
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -123,6 +126,14 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+# collectstatic (run in the Docker build) gathers admin/DRF assets here;
+# WhiteNoise serves them. Compressed, non-manifest storage keeps the build
+# from failing over a stray unresolved reference.
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 # Fallback only — every Core model defines an explicit UUIDv7 `id` per DATABASE.md §1.
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

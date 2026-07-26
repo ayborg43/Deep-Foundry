@@ -32,6 +32,7 @@ import {
   ChevronDown,
   Trash2Icon,
   CreditCard,
+  ShieldCheck,
 } from "lucide-react";
 
 import { CoworkerStatusGlyph } from "@/components/coworker-status";
@@ -56,7 +57,9 @@ const ROLE_GATED: Record<string, WorkspaceRole[]> = {
 // `match` lists extra path prefixes that should keep this item highlighted —
 // e.g. Coworkers stays active on /agent-teams because Teams is now a sub-tab
 // of the Coworkers section rather than its own top-level destination.
-type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[] };
+// `external` items (e.g. the Django admin) are real navigations to a backend
+// route, so they render as a plain <a>, not a Next <Link>.
+type NavItem = { href: string; label: string; icon: LucideIcon; match?: string[]; external?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 // The everyday surface — kept short on purpose. A new user sees eight
@@ -119,27 +122,35 @@ function NavRow({
   pathname: string;
   onNavigate?: () => void;
 }) {
-  const active = isActive(pathname, item);
+  const active = !item.external && isActive(pathname, item);
   const Icon = item.icon;
+  const className = `group flex min-h-9 min-w-0 items-center gap-2.5 rounded-[9px] border px-2.5 text-[0.84375rem] font-medium transition-[background-color,border-color,color,box-shadow] ${
+    active
+      ? "border-sidebar-border bg-card font-semibold text-foreground shadow-[var(--shadow-sm)]"
+      : "border-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+  }`;
+  const inner = (
+    <>
+      <Icon
+        className={`size-4 shrink-0 transition-colors ${
+          active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+        }`}
+      />
+      <span className="truncate">{item.label}</span>
+    </>
+  );
   return (
     <li className="min-w-0">
-      <Link
-        href={item.href}
-        onClick={onNavigate}
-        aria-current={active ? "page" : undefined}
-        className={`group flex min-h-9 min-w-0 items-center gap-2.5 rounded-[9px] border px-2.5 text-[0.84375rem] font-medium transition-[background-color,border-color,color,box-shadow] ${
-          active
-            ? "border-sidebar-border bg-card font-semibold text-foreground shadow-[var(--shadow-sm)]"
-            : "border-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        }`}
-      >
-        <Icon
-          className={`size-4 shrink-0 transition-colors ${
-            active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
-          }`}
-        />
-        <span className="truncate">{item.label}</span>
-      </Link>
+      {item.external ? (
+        // A real backend route (Django admin) — full-page nav, new tab.
+        <a href={item.href} target="_blank" rel="noopener noreferrer" onClick={onNavigate} className={className}>
+          {inner}
+        </a>
+      ) : (
+        <Link href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={className}>
+          {inner}
+        </Link>
+      )}
     </li>
   );
 }
@@ -310,6 +321,14 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           {PRIMARY.map((item) => (
             <NavRow key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
           ))}
+          {/* Platform staff (Django is_staff) get a direct link to the admin. */}
+          {isStaff ? (
+            <NavRow
+              item={{ href: "/admin/", label: "Admin", icon: ShieldCheck, external: true }}
+              pathname={pathname}
+              onNavigate={onNavigate}
+            />
+          ) : null}
         </ul>
 
         {navGroups.map((group) => (

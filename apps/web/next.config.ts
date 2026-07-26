@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
       { source: "/api/:path*", destination: `${api}/api/:path*` },
       { source: "/ai/:path*", destination: `${api}/ai/:path*` },
       { source: "/health", destination: `${api}/health` },
+      // Django admin + its static assets (served by WhiteNoise on the backend).
+      { source: "/admin/:path*", destination: `${api}/admin/:path*` },
+      { source: "/static/:path*", destination: `${api}/static/:path*` },
     ];
   },
 };
