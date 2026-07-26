@@ -277,6 +277,7 @@ def _continue_turn(
     if opening_instruction is not None:
         context_messages.append(ChatMessage(role="user", content=opening_instruction))
 
+    failure_counts: dict[str, int] = {}
     for _ in range(MAX_TOOL_ITERATIONS):
         unresolved = _find_unresolved_tool_message(conversation, exclude_message_ids)
         if unresolved is not None:
@@ -293,6 +294,13 @@ def _continue_turn(
                 return  # still blocked on at least one pending approval
             unresolved.status = Message.Status.COMPLETE
             unresolved.save(update_fields=["status"])
+            repeated = _repeated_failure_detail(unresolved, failure_counts)
+            if repeated is not None:
+                yield ChatEvent(
+                    "error",
+                    {"detail": f"I stopped because a tool kept failing: {repeated}"},
+                )
+                return
             continue  # call the model again with the new tool result(s) in history
 
         messages = _build_history(conversation, coworker_config, exclude_message_ids)
@@ -388,6 +396,12 @@ def _continue_turn(
             return  # blocked on approval
         assistant_message.status = Message.Status.COMPLETE
         assistant_message.save(update_fields=["status"])
+        repeated = _repeated_failure_detail(assistant_message, failure_counts)
+        if repeated is not None:
+            yield ChatEvent(
+                "error", {"detail": f"I stopped because a tool kept failing: {repeated}"}
+            )
+            return
         # loop again: history now includes the tool result(s)
 
     yield ChatEvent(
@@ -670,6 +684,36 @@ def _execute_and_log(
         metadata={"tool_name": tool_name, "arguments": arguments, "result": output},
     )
     return output
+
+
+def _repeated_failure_detail(
+    assistant_message: Message, failure_counts: dict[str, int]
+) -> str | None:
+    """If a tool call on this message failed with an error identical to one we've
+    already seen fail this turn (same tool + arguments), return that error. The
+    model is retrying something that won't work, so the turn should stop with the
+    error rather than burn the rest of its budget. None otherwise."""
+    results = {
+        message.tool_call_id: message.content
+        for message in Message.objects.filter(parent_message=assistant_message)
+        if message.tool_call_id
+    }
+    for call in assistant_message.tool_calls or []:
+        raw = results.get(call["id"])
+        if raw is None:
+            continue
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if not error:
+            continue
+        signature = f"{call['name']}::{json.dumps(call.get('arguments', {}), sort_keys=True)}"
+        failure_counts[signature] = failure_counts.get(signature, 0) + 1
+        if failure_counts[signature] >= 2:
+            return str(error)
+    return None
 
 
 def _store_tool_result(

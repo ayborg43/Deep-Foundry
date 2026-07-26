@@ -14,6 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Stamp the build with its git SHA so /health can report exactly what's running.
+# Pass at build time: docker build --build-arg APP_VERSION=$(git rev-parse --short HEAD)
+ARG APP_VERSION=""
+ENV APP_VERSION=$APP_VERSION
+
 EXPOSE 8000
 
 # Default to the ASGI web process; infra/docker-compose.yml overrides `command`

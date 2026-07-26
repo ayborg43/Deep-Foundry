@@ -121,6 +121,10 @@ services:
     image: agentarium-app:local
     build:
       context: ../services/app
+      args:
+        # Set APP_VERSION (e.g. the git short SHA) in the deploy env so /health
+        # reports which build is running. Defaults to empty -> "unknown".
+        APP_VERSION: ${APP_VERSION:-}
     restart: unless-stopped
     command: >-
       sh -c "python manage.py migrate --noinput &&

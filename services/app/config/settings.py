@@ -354,6 +354,11 @@ PAYMENTS_WEBHOOK_SECRET = os.environ.get("PAYMENTS_WEBHOOK_SECRET", "")
 CHAT_MAX_TOOL_ITERATIONS = int(os.environ.get("CHAT_MAX_TOOL_ITERATIONS", "12"))
 TASK_MAX_TOOL_ITERATIONS = int(os.environ.get("TASK_MAX_TOOL_ITERATIONS", "12"))
 
+# Build identifier surfaced on /health, so you can tell at a glance which commit
+# production is actually running. Set at image build time (see Dockerfile's
+# APP_VERSION build arg) to the git short SHA; "unknown" when unset locally.
+APP_VERSION = os.environ.get("APP_VERSION", "") or "unknown"
+
 # Shared cache keeps API throttle counters consistent between ASGI workers and
 # replicas instead of silently reverting to process-local counters.
 CACHES = {

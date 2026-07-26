@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pyotp
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -27,7 +28,13 @@ class HealthCheckStaysPublicTests(APITestCase):
     def test_health_does_not_require_authentication(self):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, {"status": "ok"})
+        self.assertEqual(response.data["status"], "ok")
+
+    def test_health_reports_build_version(self):
+        # /health surfaces the build id so you can confirm which commit prod runs.
+        with override_settings(APP_VERSION="abc1234"):
+            response = self.client.get("/health")
+        self.assertEqual(response.data["version"], "abc1234")
 
 
 class RegisterTests(APITestCase):

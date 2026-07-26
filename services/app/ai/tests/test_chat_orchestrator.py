@@ -293,6 +293,24 @@ class SafeToolAutoExecuteTests(ChatOrchestratorTestBase):
         self.assertIn("error", json.loads(result_message.content))
 
 
+class RepeatedFailureTests(ChatOrchestratorTestBase):
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_repeated_identical_tool_failure_stops_the_turn(self, mock_stream):
+        # The model keeps calling the same tool with the same args, and it keeps
+        # failing (unattached tool → error). After the second identical failure
+        # the turn stops with the error instead of looping to the iteration cap.
+        call_ids = iter(f"call_{i}" for i in range(50))
+        mock_stream.side_effect = lambda *_a, **_k: _stream(
+            _tool_call_chunk(next(call_ids), "not_a_real_tool", "{}"),
+            _finish_chunk("tool_calls"),
+        )
+        events = self._start_turn("keep trying the broken tool")
+        self.assertEqual(events[-1].event, "error")
+        self.assertIn("kept failing", events[-1].data["detail"])
+        # Stopped well before the iteration cap would have.
+        self.assertLessEqual(sum(e.event == "tool_call_result" for e in events), 3)
+
+
 class ApprovalGateTests(ChatOrchestratorTestBase):
     """SECURITY.md §4: `dangerous` tools can never auto-execute."""
 

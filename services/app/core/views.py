@@ -71,7 +71,9 @@ class HealthView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request: Request) -> Response:
-        return Response({"status": "ok"})
+        # `version` is the build's git SHA (see settings.APP_VERSION) — lets you
+        # confirm which commit prod is running without shell access.
+        return Response({"status": "ok", "version": settings.APP_VERSION})
 
 
 def _issue_tokens(user: User) -> dict:

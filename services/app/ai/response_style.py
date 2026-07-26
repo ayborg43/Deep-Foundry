@@ -4,18 +4,26 @@ from collections.abc import Iterable
 
 
 def execution_mode_guidance(tool_names: Iterable[str]) -> str | None:
-    """How a coworker should choose to *run* work, tailored to the orchestration
-    tools it actually holds. Returned only when those tools are present, so a
-    coworker is never told to use a tool it doesn't have. Injected into the
-    system context at turn time — this is what keeps a coworker from trying to
-    perform (and re-perform) a recurring job inline instead of scheduling it."""
+    """How a coworker should operate: what to do when it lacks a capability, and
+    (when it holds the orchestration tools) how to choose the right way to run
+    work. Tailored to the tools it actually has, so it's never told to use a
+    tool it doesn't hold. Injected into the system context at turn time."""
     names = set(tool_names)
     has_schedule = "schedule_workflow" in names
     has_task = "create_task" in names
-    if not (has_schedule or has_task):
-        return None
 
-    lines = ["Choosing how to run work:"]
+    # Always: turn "I can't do that" dead-ends into a next step. This is what
+    # keeps a coworker from flatly refusing when it just needs a tool attached,
+    # an integration linked, or a purpose-built coworker.
+    lines = [
+        "When a request needs something you can't do with your current tools, don't "
+        "just refuse — briefly tell the person how to enable it: they can add a tool "
+        "to you with the Tools button in this conversation, hire a purpose-built "
+        "coworker from Coworkers → Hire a coworker, or link an integration such as "
+        "Telegram or Slack in Settings. Then continue once it's available.",
+    ]
+    if has_schedule or has_task:
+        lines.append("Choosing how to run work:")
     if has_schedule:
         lines.append(
             '- If the request is recurring or on a schedule ("every hour", "daily", '
@@ -31,9 +39,10 @@ def execution_mode_guidance(tool_names: Iterable[str]) -> str | None:
             "from, hand it to a background task with create_task rather than doing it all "
             "in a single reply."
         )
+    # Always: guards against burning the turn budget retrying a failing tool.
     lines.append(
-        "- Work inline only for quick, one-shot answers. Never call the same tool over and "
-        "over — once you have enough to act, act, then stop."
+        "Don't call the same tool over and over hoping for a different result — once you "
+        "have enough to act, act, then stop."
     )
     return "\n".join(lines)
 
