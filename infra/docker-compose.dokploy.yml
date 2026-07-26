@@ -217,7 +217,7 @@ services:
       - traefik.docker.network=dokploy-network
       # Backend owns the API/AI/internal/health paths (priority beats the
       # frontend catch-all). Mirrors infra/traefik-dynamic.yml.
-      - "traefik.http.routers.agentarium-backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/ai`) || PathPrefix(`/internal`) || Path(`/health`))"
+      - "traefik.http.routers.agentarium-backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/ai`) || PathPrefix(`/internal`) || PathPrefix(`/admin`) || PathPrefix(`/static`) || Path(`/health`))"
       - traefik.http.routers.agentarium-backend.priority=100
       - traefik.http.routers.agentarium-backend.entrypoints=websecure
       - traefik.http.routers.agentarium-backend.tls=true

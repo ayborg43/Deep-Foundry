@@ -2,7 +2,7 @@ http:
   routers:
     backend:
       entryPoints: [web]
-      rule: "PathPrefix(`/api`) || PathPrefix(`/ai`) || PathPrefix(`/internal`) || Path(`/health`)"
+      rule: "PathPrefix(`/api`) || PathPrefix(`/ai`) || PathPrefix(`/internal`) || PathPrefix(`/admin`) || PathPrefix(`/static`) || Path(`/health`)"
       priority: 100
       service: backend
     frontend:
