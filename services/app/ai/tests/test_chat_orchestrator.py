@@ -205,6 +205,35 @@ class SimpleResponseTests(ChatOrchestratorTestBase):
         self.assertIn("just hired you", payload["messages"][-1]["content"])
 
     @patch.object(DeepSeekCloudAdapter, "_post_stream")
+    def test_scheduling_guidance_only_when_orchestration_tool_attached(self, mock_stream):
+        # Base coworker holds web_search + execute_code — no orchestration tool,
+        # so the "how to run work" guidance must not appear (it would name a tool
+        # the coworker can't call).
+        mock_stream.return_value = _stream(_content_chunk("ok"), _finish_chunk("stop"))
+        self._start_turn("hi")
+        base_messages = mock_stream.call_args.args[1]["messages"]
+        self.assertFalse(
+            any("schedule_workflow" in m.get("content", "") for m in base_messages)
+        )
+
+        # Attach schedule_workflow → the guidance is injected as a system message
+        # so the coworker schedules recurring work instead of doing it all inline.
+        CoworkerToolAttachment.objects.create(
+            coworker=self.coworker,
+            tool=Tool.objects.get(name="schedule_workflow"),
+            enabled=True,
+        )
+        mock_stream.return_value = _stream(_content_chunk("ok"), _finish_chunk("stop"))
+        self._start_turn("send me the news every hour")
+        messages = mock_stream.call_args.args[1]["messages"]
+        self.assertTrue(
+            any(
+                m["role"] == "system" and "schedule_workflow" in m.get("content", "")
+                for m in messages
+            )
+        )
+
+    @patch.object(DeepSeekCloudAdapter, "_post_stream")
     def test_missing_coworker_yields_error_event(self, mock_stream):
         events = list(
             start_turn(

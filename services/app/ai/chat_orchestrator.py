@@ -34,7 +34,7 @@ from ai.model_router.types import ChatMessage, ModelConfig, ToolCall, ToolDefini
 from ai.knowledge import search_coworker_knowledge
 from ai.memory import remember_conversation_turn, search_memory
 from ai.models import Conversation, MemoryEntry, Message
-from ai.response_style import RESPONSE_STYLE_PROMPT
+from ai.response_style import RESPONSE_STYLE_PROMPT, execution_mode_guidance
 from ai.tool_executor import ToolExecutionError, execute_tool
 from core.interface import (
     CoworkerNotFoundError,
@@ -245,6 +245,9 @@ def _continue_turn(
         .first()
     )
     context_messages: list[ChatMessage] = []
+    orchestration_guidance = execution_mode_guidance(tools_by_name)
+    if orchestration_guidance is not None:
+        context_messages.append(ChatMessage(role="system", content=orchestration_guidance))
     if latest_user is not None:
         memories = search_memory(
             workspace_id=workspace_id, scope="coworker", scope_id=coworker_id,
