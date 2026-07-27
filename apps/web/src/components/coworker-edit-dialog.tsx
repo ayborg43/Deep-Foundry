@@ -149,7 +149,7 @@ export function CoworkerEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] gap-4 overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[88vh] gap-4 overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Edit {coworker.name}</DialogTitle>
           <DialogDescription>
@@ -185,66 +185,76 @@ export function CoworkerEditDialog({
           </div>
         </div>
 
-        {/* Manual fields */}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="edit-name">Name</Label>
-          <Input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="edit-role">Role description</Label>
-          <Textarea id="edit-role" rows={4} value={role} onChange={(e) => setRole(e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="edit-model">Model</Label>
-          <Select value={model} onValueChange={(v) => setModel(v as ModelId)}>
-            <SelectTrigger id="edit-model" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODEL_OPTIONS.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Tools</Label>
-          <ul className="flex max-h-52 flex-col divide-y overflow-y-auto rounded-lg border">
-            {sortedTools.map((tool) => {
-              const checked = toolIds.has(tool.id);
-              return (
-                <li key={tool.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleTool(tool.id)}
-                    aria-pressed={checked}
-                    className="flex w-full items-start gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/40"
-                  >
-                    <span
-                      className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border ${
-                        checked ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                      }`}
+        {/* Manual fields — two columns on desktop, stacked on mobile */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-model">Model</Label>
+              <Select value={model} onValueChange={(v) => setModel(v as ModelId)}>
+                <SelectTrigger id="edit-model" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor="edit-role">Role description</Label>
+              <Textarea
+                id="edit-role"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="min-h-32 flex-1 md:min-h-48"
+              />
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-col gap-1.5">
+            <Label>Tools</Label>
+            <ul className="flex max-h-72 flex-1 flex-col divide-y overflow-y-auto rounded-lg border md:max-h-none">
+              {sortedTools.map((tool) => {
+                const checked = toolIds.has(tool.id);
+                return (
+                  <li key={tool.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggleTool(tool.id)}
+                      aria-pressed={checked}
+                      className="flex w-full items-start gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/40"
                     >
-                      {checked ? <CheckIcon className="size-3" /> : null}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{tool.name}</span>
-                        <Badge className={RISK_BADGE_CLASS[tool.risk_classification]}>
-                          {RISK_LABELS[tool.risk_classification]}
-                        </Badge>
+                      <span
+                        className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border ${
+                          checked ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                        }`}
+                      >
+                        {checked ? <CheckIcon className="size-3" /> : null}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                        {tool.description}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{tool.name}</span>
+                          <Badge className={RISK_BADGE_CLASS[tool.risk_classification]}>
+                            {RISK_LABELS[tool.risk_classification]}
+                          </Badge>
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                          {tool.description}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
 
         <DialogFooter>
