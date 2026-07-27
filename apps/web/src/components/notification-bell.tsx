@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { tabHidden } from "@/lib/poll";
+import { onVisible, tabHidden } from "@/lib/poll";
 import type { Notification } from "@/lib/types";
 
 export function NotificationBell() {
@@ -25,7 +25,11 @@ export function NotificationBell() {
     const timer = window.setInterval(() => {
       if (!tabHidden()) void load();
     }, 30_000);
-    return () => window.clearInterval(timer);
+    const stopVisible = onVisible(() => void load());
+    return () => {
+      window.clearInterval(timer);
+      stopVisible();
+    };
   }, []);
 
   async function markRead(notification: Notification) {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiFetch } from "./api";
-import { tabHidden } from "./poll";
+import { onVisible, tabHidden } from "./poll";
 import type { CoworkerStatus, CoworkerStatusState } from "./types";
 
 export const COWORKER_STATUS_META: Record<
@@ -72,9 +72,11 @@ export function useCoworkerStatuses(
     const timer = window.setInterval(() => {
       if (!tabHidden()) void load();
     }, intervalMs);
+    const stopVisible = onVisible(() => void load());
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      stopVisible();
     };
   }, [workspaceId, intervalMs]);
 

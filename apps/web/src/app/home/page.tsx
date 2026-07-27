@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
 import { apiFetch, ApiRequestError } from "@/lib/api";
-import { tabHidden } from "@/lib/poll";
+import { onVisible, tabHidden } from "@/lib/poll";
 import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
 import { useCoworkerStatuses } from "@/lib/coworker-status";
@@ -105,6 +105,7 @@ export default function HomePage() {
       return;
     }
     let timer: number | undefined;
+    let stopVisible: (() => void) | undefined;
     void (async () => {
       const id = await getWorkspaceId();
       setWorkspaceId(id);
@@ -149,10 +150,15 @@ export default function HomePage() {
         timer = window.setInterval(() => {
           if (!tabHidden()) void loadApprovals();
         }, 15_000);
+        // Refetch the moment the app is reopened — on mobile the interval is
+        // suspended while backgrounded, so returning users would otherwise have
+        // to refresh to see a new pending approval.
+        stopVisible = onVisible(() => void loadApprovals());
       }
     })();
     return () => {
       if (timer !== undefined) window.clearInterval(timer);
+      stopVisible?.();
     };
   }, [router]);
 
