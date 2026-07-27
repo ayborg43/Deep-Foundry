@@ -19,13 +19,19 @@ const SESSION_ACTIVITY_KEY = "deep-foundry.session.last_activity";
 
 export const AUTH_SESSION_CHANGED_EVENT = "deep-foundry:auth-session-changed";
 
+// Idle timeout (minutes of no interaction before logout). Activity resets it,
+// and the refresh token lasts 14 days, so this is purely the "walked away"
+// window — default a full workday so waiting on a task or reading a long reply
+// never logs you out. Override with NEXT_PUBLIC_SESSION_IDLE_TIMEOUT_MINUTES
+// (read at build time), capped at 7 days.
+const DEFAULT_IDLE_TIMEOUT_MINUTES = 480;
 const configuredTimeoutMinutes = Number(
-  process.env.NEXT_PUBLIC_SESSION_IDLE_TIMEOUT_MINUTES ?? "30"
+  process.env.NEXT_PUBLIC_SESSION_IDLE_TIMEOUT_MINUTES ?? String(DEFAULT_IDLE_TIMEOUT_MINUTES)
 );
 export const SESSION_IDLE_TIMEOUT_MS =
   Number.isFinite(configuredTimeoutMinutes) && configuredTimeoutMinutes > 0
     ? Math.min(configuredTimeoutMinutes, 7 * 24 * 60) * 60_000
-    : 30 * 60_000;
+    : DEFAULT_IDLE_TIMEOUT_MINUTES * 60_000;
 
 let memoryTokens: Tokens | null = null;
 
