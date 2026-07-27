@@ -248,6 +248,18 @@ def _continue_turn(
     orchestration_guidance = execution_mode_guidance(tools_by_name)
     if orchestration_guidance is not None:
         context_messages.append(ChatMessage(role="system", content=orchestration_guidance))
+    # So a coworker can edit itself: it needs to know its own name to pass as
+    # `coworker` to update_coworker.
+    if "update_coworker" in tools_by_name and coworker_config.name:
+        context_messages.append(
+            ChatMessage(
+                role="system",
+                content=(
+                    f'Your name is "{coworker_config.name}". To change your own '
+                    f'configuration, call update_coworker with coworker="{coworker_config.name}".'
+                ),
+            )
+        )
     if latest_user is not None:
         memories = search_memory(
             workspace_id=workspace_id, scope="coworker", scope_id=coworker_id,

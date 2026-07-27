@@ -23,6 +23,7 @@ MAX_TEAM_SIZE = 6
 ORCHESTRATION_TOOLS = (
     "workspace_status",
     "create_coworker",
+    "update_coworker",
     "create_agent_team",
     "run_agent_team",
     "create_task",

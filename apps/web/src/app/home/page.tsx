@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangleIcon, PlusIcon, MicIcon, ArrowUpIcon, BellIcon, ChevronRightIcon, ClockIcon, InboxIcon, Wand2Icon } from "lucide-react";
+import { AlertTriangleIcon, PlusIcon, MicIcon, ArrowUpIcon, BellIcon, ChevronRightIcon, ClockIcon, InboxIcon, PencilIcon, Wand2Icon } from "lucide-react";
 
 import { ApprovalPolicyDialog } from "@/components/approval-policy-dialog";
+import { CoworkerEditDialog } from "@/components/coworker-edit-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/logo";
@@ -15,7 +16,7 @@ import { getTokens, getWorkspaceId } from "@/lib/auth";
 import { createConversation } from "@/lib/chat";
 import { useCoworkerStatuses } from "@/lib/coworker-status";
 import { RISK_BADGE_CLASS, RISK_LABELS } from "@/lib/coworkers";
-import type { AgentTeam, ApprovalRequestData, BackgroundTask, Coworker, User } from "@/lib/types";
+import type { AgentTeam, ApprovalRequestData, BackgroundTask, Coworker, Tool, User } from "@/lib/types";
 
 const IDEAS = [
   { icon: BellIcon, label: "Send me a daily briefing" },
@@ -83,6 +84,8 @@ export default function HomePage() {
   const [name, setName] = useState<string>("");
   const [coworkers, setCoworkers] = useState<Coworker[]>([]);
   const [teams, setTeams] = useState<AgentTeam[]>([]);
+  const [allTools, setAllTools] = useState<Tool[]>([]);
+  const [editing, setEditing] = useState<Coworker | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [busyNote, setBusyNote] = useState<string | null>(null);
@@ -117,6 +120,8 @@ export default function HomePage() {
         } catch {
           // With no roster, the composer designs a team on first submit.
         }
+        // Tool catalog powers the edit dialog's manual tool picker.
+        void apiFetch<Tool[]>("/tools").then(setAllTools).catch(() => {});
         try {
           setTeams(await apiFetch<AgentTeam[]>(`/agent-teams?workspace_id=${id}`));
         } catch {
@@ -615,6 +620,53 @@ export default function HomePage() {
           })}
         </ul>
       </div>
+
+      {/* Your coworkers — quick edit (describe a change or edit fields) */}
+      {coworkers.length > 0 ? (
+        <div className="mt-8">
+          <div className="mb-1 flex items-center justify-between px-1">
+            <p className="text-sm text-muted-foreground">Your coworkers</p>
+            <Link href="/coworkers/new" className="text-xs text-muted-foreground hover:text-foreground">
+              + Hire
+            </Link>
+          </div>
+          <ul className="flex flex-col divide-y rounded-lg border">
+            {coworkers.map((coworker) => (
+              <li key={coworker.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <Link href={`/coworkers/${coworker.id}`} className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{coworker.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {coworker.role_description}
+                  </span>
+                </Link>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => setEditing(coworker)}
+                >
+                  <PencilIcon data-icon="inline-start" />
+                  Edit
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {editing ? (
+        <CoworkerEditDialog
+          open={editing !== null}
+          onOpenChange={(o) => !o && setEditing(null)}
+          coworker={editing}
+          allTools={allTools}
+          onSaved={(updated) => {
+            setCoworkers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+            setEditing(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

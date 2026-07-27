@@ -10,6 +10,17 @@ export type User = {
   created_at: string;
 };
 
+// Proposed changes from POST /coworkers/{id}/suggest-edit — fields the AI
+// thinks should change (all optional) plus a one-line summary. Tools are names.
+export type CoworkerEditProposal = {
+  name?: string;
+  role_description?: string;
+  model?: ModelId;
+  add_tools?: string[];
+  remove_tools?: string[];
+  summary: string;
+};
+
 export type WorkspaceRole =
   | "owner"
   | "admin"

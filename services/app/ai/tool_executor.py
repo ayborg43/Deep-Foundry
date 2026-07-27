@@ -43,6 +43,7 @@ from core.interface import (
     orchestrate_create_team,
     orchestrate_run_team,
     orchestrate_schedule_workflow,
+    orchestrate_update_coworker,
     send_workspace_telegram,
 )
 
@@ -427,6 +428,10 @@ _EXECUTORS = {
     "workspace_status": _workspace_status,
     "create_coworker": _orchestration_executor(
         orchestrate_create_coworker, ("name", "role_description", "tools")
+    ),
+    "update_coworker": _orchestration_executor(
+        orchestrate_update_coworker,
+        ("coworker", "name", "role_description", "model", "add_tools", "remove_tools"),
     ),
     "create_agent_team": _orchestration_executor(
         orchestrate_create_team, ("name", "collaboration_pattern", "members")

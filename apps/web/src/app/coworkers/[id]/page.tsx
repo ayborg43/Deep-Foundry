@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeftIcon, BotIcon, MessageCircleIcon } from "lucide-react";
+import { ArrowLeftIcon, BotIcon, MessageCircleIcon, SparklesIcon } from "lucide-react";
 
+import { CoworkerEditDialog } from "@/components/coworker-edit-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -139,6 +140,9 @@ export default function CoworkerDetailPage() {
   // Chat --------------------------------------------------------------
   const [isStartingChat, setIsStartingChat] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+
+  // Prompt-driven edit dialog
+  const [editOpen, setEditOpen] = useState(false);
 
   function applyIdentity(data: Coworker) {
     const snapshot = snapshotOf(data);
@@ -483,11 +487,31 @@ export default function CoworkerDetailPage() {
           <ArrowLeftIcon className="size-3.5" />
           Coworkers
         </Link>
-        <Button type="button" size="sm" disabled={isStartingChat} onClick={handleStartChat}>
-          <MessageCircleIcon data-icon="inline-start" />
-          {isStartingChat ? "Starting..." : "Chat"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+            <SparklesIcon data-icon="inline-start" />
+            Edit with a prompt
+          </Button>
+          <Button type="button" size="sm" disabled={isStartingChat} onClick={handleStartChat}>
+            <MessageCircleIcon data-icon="inline-start" />
+            {isStartingChat ? "Starting..." : "Chat"}
+          </Button>
+        </div>
       </div>
+
+      {editOpen ? (
+        <CoworkerEditDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          coworker={coworker}
+          allTools={allTools}
+          onSaved={(updated) => {
+            setCoworker(updated);
+            applyIdentity(updated);
+            loadVersions(updated.id);
+          }}
+        />
+      ) : null}
 
       {chatError ? (
         <Alert variant="destructive">

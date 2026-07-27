@@ -24,6 +24,7 @@ from core.chat_views import (
 from core.views import (
     CoworkerAvatarUploadView,
     CoworkerDetailView,
+    CoworkerSuggestEditView,
     CoworkerListCreateView,
     CoworkerToolAttachView,
     CoworkerToolDetachView,
@@ -209,6 +210,11 @@ urlpatterns = [
         name="coworker-status-list",
     ),
     path("coworkers/<uuid:coworker_id>", CoworkerDetailView.as_view(), name="coworker-detail"),
+    path(
+        "coworkers/<uuid:coworker_id>/suggest-edit",
+        CoworkerSuggestEditView.as_view(),
+        name="coworker-suggest-edit",
+    ),
     path(
         "coworkers/<uuid:coworker_id>/avatar",
         CoworkerAvatarUploadView.as_view(),

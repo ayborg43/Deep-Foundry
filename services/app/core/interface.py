@@ -41,6 +41,7 @@ class ResolvedCoworkerConfig:
     model_binding: dict[str, Any]
     permission_profile: dict[str, str]
     org_policy_floor: dict[str, str] = field(default_factory=dict)
+    name: str = ""
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,7 @@ def get_coworker_config(coworker_id: UUID | str) -> ResolvedCoworkerConfig:
         model_binding=version.model_binding,
         permission_profile=version.permission_profile.default_tool_risk_policy,
         org_policy_floor=org_floor,
+        name=coworker.name,
     )
 
 
@@ -705,6 +707,72 @@ def orchestrate_create_coworker(
         metadata={"via": "orchestration_tool"},
     )
     return {"coworker_id": str(coworker.id), "name": coworker.name, "tools": attached}
+
+
+# Kept in sync with the deployed DeepSeek models (see ai.model_router); a local
+# copy avoids a core -> ai import just to validate a string.
+_ORCH_VALID_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"}
+
+
+def orchestrate_update_coworker(
+    *, workspace_id: UUID | str, coworker: str, name: str | None = None,
+    role_description: str | None = None, model: str | None = None,
+    add_tools: list[str] | None = None, remove_tools: list[str] | None = None,
+) -> dict[str, Any]:
+    """Edit an existing coworker from chat. `coworker` is a name or id (a
+    coworker passes its own name to edit itself). Only the provided fields
+    change; role/model edits create a new version, so nothing is lost."""
+    from core.coworkers import create_new_version
+
+    workspace = _orchestration_workspace(workspace_id)
+    target = _find_by_name_or_id(
+        workspace.coworkers.filter(status="active"), str(coworker or "").strip(), kind="coworker"
+    )
+    changed: list[str] = []
+
+    if isinstance(name, str) and name.strip():
+        target.name = name.strip()[:255]
+        target.save(update_fields=["name", "updated_at"])
+        changed.append(f"renamed to {target.name}")
+
+    new_role = role_description.strip() if isinstance(role_description, str) and role_description.strip() else None
+    new_binding = {"primary": model.strip()} if isinstance(model, str) and model.strip() in _ORCH_VALID_MODELS else None
+    if new_role or new_binding:
+        create_new_version(
+            target, created_by=workspace.owner,
+            role_description=new_role, model_binding=new_binding, changelog="Updated via chat",
+        )
+        if new_role:
+            changed.append("role")
+        if new_binding:
+            changed.append(f"model to {new_binding['primary']}")
+
+    added, removed = [], []
+    for tool_name in add_tools or []:
+        tool = Tool.objects.filter(name=str(tool_name).strip()).first()
+        if tool is not None:
+            CoworkerToolAttachment.objects.get_or_create(coworker=target, tool=tool)
+            added.append(tool.name)
+    for tool_name in remove_tools or []:
+        tool = Tool.objects.filter(name=str(tool_name).strip()).first()
+        if tool is not None:
+            CoworkerToolAttachment.objects.filter(coworker=target, tool=tool).delete()
+            removed.append(tool.name)
+    if added:
+        changed.append("added tools: " + ", ".join(added))
+    if removed:
+        changed.append("removed tools: " + ", ".join(removed))
+
+    if not changed:
+        raise OrchestrationError(
+            "Nothing to update — provide a name, role_description, model, add_tools, or remove_tools."
+        )
+    write_audit_log(
+        actor_type="user", actor_id=workspace.owner_id, action="coworker.update",
+        resource_type="coworker", resource_id=target.id, workspace_id=workspace.id,
+        metadata={"via": "orchestration_tool", "changed": changed},
+    )
+    return {"coworker_id": str(target.id), "name": target.name, "changed": changed}
 
 
 def orchestrate_create_team(

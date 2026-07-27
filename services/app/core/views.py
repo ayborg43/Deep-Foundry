@@ -651,6 +651,48 @@ class CoworkerDetailView(APIView):
         )
         return Response(CoworkerSerializer(coworker).data)
 
+
+class CoworkerSuggestEditView(APIView):
+    """POST /coworkers/{id}/suggest-edit — turn a plain-English instruction into
+    proposed config changes (name/role/model/tools) the client prefills into the
+    edit form for review. Proposes only; the actual save goes through PATCH and
+    the tool-attach endpoints, so a human always confirms."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, coworker_id: str) -> Response:
+        from ai.coworker_editor import CoworkerEditError, suggest_edit
+        from ai.model_router.errors import AdapterError
+        from core.interface import CredentialNotFoundError
+
+        coworker = get_coworker_for_member(request.user, coworker_id, require_write=True)
+        instruction = str(request.data.get("instruction", "")).strip()
+        if not instruction:
+            raise ValidationError({"instruction": "Describe what you'd like to change."})
+        try:
+            proposal = suggest_edit(
+                workspace_id=coworker.workspace_id,
+                coworker_id=coworker.id,
+                instruction=instruction,
+            )
+        except CredentialNotFoundError:
+            return Response(
+                {"error": {"code": "provider_credential_required", "message": "Add a DeepSeek API key under Settings → Model providers first.", "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except CoworkerEditError as exc:
+            return Response(
+                {"error": {"code": "edit_failed", "message": str(exc), "details": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except AdapterError as exc:
+            return Response(
+                {"error": {"code": "edit_failed", "message": f"Couldn't draft the change: {exc}", "details": {}}},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(proposal)
+
+
 class CoworkerAvatarUploadView(APIView):
     """POST /coworkers/{id}/avatar — multipart image upload, stored inline
     as a data URI on the coworker row. Small by design (1 MB cap): avatars

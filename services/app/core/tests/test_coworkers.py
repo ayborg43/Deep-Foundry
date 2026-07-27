@@ -1,11 +1,17 @@
+import json
+from unittest.mock import patch
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from ai.model_router.adapters.deepseek_cloud import DeepSeekCloudAdapter
+from core.encryption import encrypt_to_bytes
 from core.models import (
     Coworker,
     CoworkerToolAttachment,
     CoworkerVersion,
+    ProviderCredential,
     Tool,
     User,
     Workspace,
@@ -68,7 +74,7 @@ class ToolCatalogTests(CoworkerTestBase):
                 "send_discord_message", "create_github_issue", "post_tweet", "send_webhook",
                 "create_presentation", "create_diagram", "record_video_analysis",
                 "propose_capability",
-                "workspace_status", "create_coworker", "create_agent_team",
+                "workspace_status", "create_coworker", "update_coworker", "create_agent_team",
                 "run_agent_team", "create_task", "schedule_workflow",
             },
         )
@@ -77,6 +83,86 @@ class ToolCatalogTests(CoworkerTestBase):
         self.client.credentials()
         response = self.client.get(reverse("tool-catalog-list"))
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class SuggestEditTests(CoworkerTestBase):
+    """POST /coworkers/{id}/suggest-edit turns a plain-English instruction into
+    a reviewed proposal — the conversational half of coworker editing."""
+
+    def setUp(self):
+        super().setUp()
+        ProviderCredential.objects.create(
+            workspace=self.workspace,
+            deployment_mode=ProviderCredential.DeploymentMode.DEEPSEEK_CLOUD,
+            encrypted_key=encrypt_to_bytes("fake-key"),
+            label="test", is_default=True,
+        )
+
+    @patch.object(DeepSeekCloudAdapter, "_post")
+    def test_returns_sanitized_proposal(self, post):
+        coworker_id = self._create_coworker(name="Ava")["id"]
+        post.return_value = {
+            "model": "deepseek-v4-flash",
+            "choices": [{
+                "message": {"content": json.dumps({
+                    "role_description": "Handle invoice triage carefully.",
+                    "model": "deepseek-v4-pro",
+                    "add_tools": ["web_search"],
+                    "remove_tools": [],
+                    "not_a_field": "ignored",
+                    "summary": "Focus on invoices, pro model, add web search",
+                })},
+                "finish_reason": "stop",
+            }],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 5},
+        }
+        response = self.client.post(
+            reverse("coworker-suggest-edit", kwargs={"coworker_id": coworker_id}),
+            {"instruction": "focus on invoices, use the pro model, add web search"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["model"], "deepseek-v4-pro")
+        self.assertEqual(response.data["add_tools"], ["web_search"])
+        self.assertIn("invoice", response.data["role_description"].lower())
+        self.assertNotIn("not_a_field", response.data)  # unknown fields dropped
+
+    def test_blank_instruction_is_rejected(self):
+        coworker_id = self._create_coworker(name="Ava")["id"]
+        response = self.client.post(
+            reverse("coworker-suggest-edit", kwargs={"coworker_id": coworker_id}),
+            {"instruction": "   "},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class UpdateCoworkerToolTests(CoworkerTestBase):
+    """The in-chat update_coworker orchestration tool — edits by name/id and
+    versions role/model changes."""
+
+    def test_applies_changes_and_creates_a_version(self):
+        from core.interface import orchestrate_update_coworker
+
+        self._create_coworker(name="Vega")
+        result = orchestrate_update_coworker(
+            workspace_id=self.workspace.id, coworker="Vega",
+            role_description="Focus on release notes.", model="deepseek-v4-pro",
+            add_tools=["web_search"],
+        )
+        coworker = Coworker.objects.get(id=result["coworker_id"])
+        self.assertEqual(coworker.name, "Vega")
+        self.assertEqual(coworker.current_version.role_description, "Focus on release notes.")
+        self.assertEqual(coworker.current_version.model_binding["primary"], "deepseek-v4-pro")
+        self.assertTrue(coworker.tool_attachments.filter(tool__name="web_search").exists())
+        self.assertGreaterEqual(coworker.current_version.version_number, 2)
+
+    def test_nothing_to_change_raises(self):
+        from core.interface import OrchestrationError, orchestrate_update_coworker
+
+        self._create_coworker(name="Nova")
+        with self.assertRaises(OrchestrationError):
+            orchestrate_update_coworker(workspace_id=self.workspace.id, coworker="Nova")
 
 
 class ScheduleWorkflowReviewTests(CoworkerTestBase):
